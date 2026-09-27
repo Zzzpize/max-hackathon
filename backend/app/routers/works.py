@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +19,7 @@ async def create_work(
         title=payload.title,
         subject=payload.subject,
         grade=payload.grade,
-        tasks=[t.model_dump() for t in payload.tasks],
+        tasks=[task.model_dump() for task in payload.tasks],
     )
     session.add(work)
     await session.commit()
@@ -30,10 +30,16 @@ async def create_work(
 @router.get("", response_model=list[WorkTemplateOut])
 async def list_works(
     teacher_id: str,
+    limit: int = Query(default=50, ge=1),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
 ) -> list[WorkTemplate]:
     result = await session.execute(
-        select(WorkTemplate).where(WorkTemplate.teacher_id == teacher_id)
+        select(WorkTemplate)
+        .where(WorkTemplate.teacher_id == teacher_id)
+        .order_by(WorkTemplate.created_at, WorkTemplate.id)
+        .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
 
