@@ -15,7 +15,7 @@ class GigaChatClient:
     """
 
     def __init__(self) -> None:
-        self._auth_key = settings.gigachat_auth_key
+        self._credentials = settings.gigachat_credentials
         self._scope = settings.gigachat_scope
         self._model = settings.gigachat_model
         self._verify_ssl = settings.gigachat_verify_ssl_certs
@@ -26,8 +26,8 @@ class GigaChatClient:
         system_prompt: str,
     ) -> list[dict]:
         """Vision-запрос: извлечь ответы ученика с фото работы."""
-        if not self._auth_key:
-            logger.warning("GIGACHAT_AUTH_KEY not set — returning stub answers")
+        if not self._credentials:
+            logger.warning("GigaChat credentials not set — returning stub answers")
             return []
 
         # TODO(backend, LLM): загрузка изображений в GigaChat через SDK,
@@ -42,8 +42,8 @@ class GigaChatClient:
         student_answer: str,
     ) -> dict:
         """Проверка одного задания через LLM с эталоном."""
-        if not self._auth_key:
-            logger.warning("GIGACHAT_AUTH_KEY not set — returning stub verdict")
+        if not self._credentials:
+            logger.warning("GigaChat credentials not set — returning stub verdict")
             return {
                 "correct": student_answer.strip() == expected_answer.strip(),
                 "explanation": "",

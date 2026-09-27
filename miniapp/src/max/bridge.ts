@@ -1,26 +1,80 @@
-// Тонкая обёртка над MAX Bridge для мини-приложений.
-// TODO(frontend/MAX): подключить официальный @vkontakte/max-bridge (или что
-// организаторы пришлют) и пробросить нативные методы (haptics, close,
-// getPlatform, sendMessageToChat).
+export type MaxPlatform = "ios" | "android" | "desktop" | "web" | "unknown";
 
-type MaxPlatform = "ios" | "android" | "web" | "desktop" | "unknown";
-
-type MaxBridgeStub = {
-  ready: () => Promise<void>;
-  getPlatform: () => Promise<MaxPlatform>;
-  getUser: () => Promise<{ user_id: number; first_name?: string } | null>;
-  close: () => Promise<void>;
+export type MaxUser = {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
 };
 
-function makeStub(): MaxBridgeStub {
-  return {
-    ready: async () => undefined,
-    getPlatform: async () => "unknown",
-    getUser: async () => null,
-    close: async () => undefined,
+type WebAppApi = {
+  initData?: string;
+  initDataUnsafe?: {
+    user?: MaxUser;
+    start_param?: string;
+    auth_date?: number;
+    hash?: string;
   };
-}
+  platform?: MaxPlatform;
+  version?: string;
+  deviceName?: string;
+  BackButton?: {
+    show?: () => void;
+    hide?: () => void;
+    onClick?: (cb: () => void) => void;
+  };
+  HapticFeedback?: {
+    impactOccurred?: (style: "light" | "medium" | "heavy") => void;
+    notificationOccurred?: (type: "success" | "error" | "warning") => void;
+  };
+  enableClosingConfirmation?: () => void;
+  openLink?: (url: string) => void;
+  DeviceStorage?: {
+    setItem?: (k: string, v: string) => void;
+    getItem?: (k: string) => string | null;
+  };
+};
 
-const globalBridge = (globalThis as unknown as { MaxBridge?: MaxBridgeStub }).MaxBridge;
+const webApp: WebAppApi | undefined = (
+  globalThis as unknown as { WebApp?: WebAppApi }
+).WebApp;
 
-export const maxBridge: MaxBridgeStub = globalBridge ?? makeStub();
+export const maxBridge = {
+  isAvailable: Boolean(webApp),
+
+  getUser(): MaxUser | null {
+    return webApp?.initDataUnsafe?.user ?? null;
+  },
+
+  getStartParam(): string | null {
+    return webApp?.initDataUnsafe?.start_param ?? null;
+  },
+
+  getInitData(): string {
+    return webApp?.initData ?? "";
+  },
+
+  getPlatform(): MaxPlatform {
+    return webApp?.platform ?? "unknown";
+  },
+
+  hapticImpact(style: "light" | "medium" | "heavy" = "light"): void {
+    webApp?.HapticFeedback?.impactOccurred?.(style);
+  },
+
+  hapticNotify(type: "success" | "error" | "warning"): void {
+    webApp?.HapticFeedback?.notificationOccurred?.(type);
+  },
+
+  backButton: {
+    show(): void {
+      webApp?.BackButton?.show?.();
+    },
+    hide(): void {
+      webApp?.BackButton?.hide?.();
+    },
+    onClick(cb: () => void): void {
+      webApp?.BackButton?.onClick?.(cb);
+    },
+  },
+};

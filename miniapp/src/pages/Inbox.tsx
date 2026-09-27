@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Submission } from "../api/client";
+import { maxBridge } from "../max/bridge";
 
 export function Inbox() {
   const [items, setItems] = useState<Submission[]>([]);
@@ -8,9 +9,11 @@ export function Inbox() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO(frontend): teacher_id брать из MAX Bridge (авторизованный пользователь)
+    const user = maxBridge.getUser();
+    const teacherId = user ? String(user.id) : "teacher-stub";
+
     api
-      .listSubmissions("teacher-stub", "checked")
+      .listSubmissions(teacherId, "checked")
       .then(setItems)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));

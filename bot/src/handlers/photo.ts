@@ -1,36 +1,62 @@
-import { createSubmission } from "../api.js";
-import { config } from "../config.js";
-import { downloadAttachment, sendMessage, sendMiniappButton, type MaxUpdate } from "../max.js";
+import type { Context } from "@maxhub/max-bot-api";
+import { createSubmission, downloadPhoto } from "../api.js";
+import { kb, openMiniappButton } from "../max.js";
+import { getState } from "../state.js";
 
-export async function handlePhoto(update: MaxUpdate): Promise<void> {
-  const chatId = update.message?.recipient?.chat_id ?? update.message?.sender?.user_id;
-  if (!chatId) return;
+export async function handlePhoto(ctx: Context): Promise<boolean> {
+  const attachments = ctx.message?.body?.attachments ?? [];
+  const images = attachments.filter(
+    (a: { type?: string }) => a.type === "image"
+  );
+  if (images.length === 0) return false;
 
-  const attachments = update.message?.body?.attachments ?? [];
+  const userId = ctx.message?.sender?.user_id;
+  if (!userId) return false;
+  const state = getState(userId);
+
+  if (!state.workId || !state.studentId) {
+    await ctx.reply(
+      "Сначала выбери работу и ученика в мини-приложении, потом присылай фото.",
+      { attachments: [kb.inlineKeyboard([[openMiniappButton("Открыть")]])] }
+    );
+    return true;
+  }
+
   const photos: { buffer: Buffer; filename: string }[] = [];
-
-  for (const [idx, att] of attachments.entries()) {
-    // TODO(frontend/MAX): уточнить структуру attachment в MAX API из документации
+  for (const [idx, att] of images.entries()) {
     const url = (att as { payload?: { url?: string } }).payload?.url;
     if (!url) continue;
-    const buffer = await downloadAttachment(url);
+    const buffer = await downloadPhoto(url);
     photos.push({ buffer, filename: `page-${idx}.jpg` });
   }
 
   if (photos.length === 0) {
-    await sendMessage(chatId, "Не увидел фото — попробуй ещё раз.");
-    return;
+    await ctx.reply("Не смог скачать фото. Попробуй ещё раз.");
+    return true;
   }
 
-  // TODO(frontend/MAX): выбор work_id и student_id должен идти через
-  // диалог с ботом или через мини-приложение до отправки фото.
-  // Пока стаб — используем плейсхолдеры.
-  const submission = await createSubmission({
-    workId: "stub-work-id",
-    studentId: "stub-student-id",
-    photos,
-  });
+  try {
+    const submission = await createSubmission({
+      workId: state.workId,
+      studentId: state.studentId,
+      photos,
+    });
 
-  const url = `${config.miniappUrl}?submission=${submission.id}`;
-  await sendMiniappButton(chatId, "Работа принята на проверку.", url, "Открыть результат");
+    await ctx.reply(
+      `Принял ${photos.length} фото, работа №${submission.id.slice(0, 8)} на проверке. ` +
+        "Обычно занимает 30–60 секунд.",
+      {
+        attachments: [
+          kb.inlineKeyboard([
+            [openMiniappButton("Открыть результат", `submission:${submission.id}`)],
+          ]),
+        ],
+      }
+    );
+  } catch (err) {
+    await ctx.reply("Не удалось отправить работу на проверку. Попробуй ещё раз.");
+    throw err;
+  }
+
+  return true;
 }

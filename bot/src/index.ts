@@ -1,35 +1,49 @@
-import Fastify from "fastify";
+import type { Context, NextFn } from "@maxhub/max-bot-api";
 import { config } from "./config.js";
 import { handlePhoto } from "./handlers/photo.js";
 import { handleStart } from "./handlers/start.js";
-import type { MaxUpdate } from "./max.js";
+import { notifyChecked } from "./handlers/notify.js";
+import { bot } from "./max.js";
 
-const app = Fastify({ logger: true });
+bot.on("bot_started", handleStart);
+bot.command("start", handleStart);
 
-app.get("/health", async () => ({ status: "ok" }));
-
-app.post("/webhook", async (req, reply) => {
-  const update = req.body as MaxUpdate;
-  try {
-    if (update.update_type === "message_created") {
-      const text = update.message?.body?.text?.trim() ?? "";
-      const attachments = update.message?.body?.attachments ?? [];
-
-      if (attachments.length > 0) {
-        await handlePhoto(update);
-      } else if (text.startsWith("/start")) {
-        await handleStart(update);
-      }
-    }
-    // TODO(frontend/MAX): расширить обработку — bot_started, callback, etc.
-    return reply.send({ ok: true });
-  } catch (err) {
-    app.log.error({ err }, "webhook handler failed");
-    return reply.status(500).send({ ok: false });
-  }
+bot.on("message_created", async (ctx: Context, next: NextFn) => {
+  const handled = await handlePhoto(ctx);
+  if (!handled) return next();
 });
 
-app.listen({ port: config.port, host: "0.0.0.0" }).catch((err) => {
-  app.log.error(err);
-  process.exit(1);
+bot.on("message_created", async (ctx: Context) => {
+  const text = ctx.message?.body?.text?.trim();
+  if (!text) return;
+  if (text.startsWith("/")) return;
+  await ctx.reply(
+    "Пришли фото контрольной работы одного ученика. Одно или несколько снимков подряд."
+  );
 });
+
+bot.catch((err: unknown) => {
+  console.error("[bot] unhandled error", err);
+});
+
+if (config.webhookDomain) {
+  bot.start({
+    mode: "webhook",
+    options: {
+      domain: config.webhookDomain,
+      port: config.port,
+      secret: config.webhookSecret || undefined,
+      allowedUpdates: ["message_created", "bot_started", "message_callback"],
+    },
+  });
+  console.log(`[bot] webhook mode at ${config.webhookDomain}`);
+} else {
+  void bot.start();
+  console.log("[bot] long polling mode");
+}
+
+// Внутренний HTTP-канал backend → bot для пуша учителю после проверки.
+// MVP: примитивный http-сервер на том же порту не нужен при polling.
+// TODO(frontend/MAX): вынести notifyChecked в отдельный HTTP endpoint
+// когда бэкенд начнёт его вызывать. Пока экспортируем, чтобы не терять.
+export { notifyChecked };
