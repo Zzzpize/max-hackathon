@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      STORAGE_DIR: ${STORAGE_DIR}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL}
+      GIGACHAT_VERIFY_SSL_CERTS: ${GIGACHAT_VERIFY_SSL_CERTS}
+    volumes:
+      - storage_data:/app/storage
+    ports:
+      - "${BACKEND_PORT}:8000"
+
+  bot:
+    build: ./bot
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
+      MAX_API_BASE: ${MAX_API_BASE}
+      BACKEND_URL: ${BACKEND_URL}
+      MINIAPP_PUBLIC_URL: ${MINIAPP_PUBLIC_URL}
+    ports:
+      - "${BOT_PORT}:3000"
+
+  miniapp:
+    build:
+      context: ./miniapp
+      args:
+        VITE_API_BASE: ${VITE_API_BASE}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${MINIAPP_PORT}:80"
+
+volumes:
+  postgres_data:
+  storage_data:

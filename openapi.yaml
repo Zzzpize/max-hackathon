@@ -1,0 +1,306 @@
+openapi: 3.0.3
+info:
+  title: Помощник учителя API
+  version: 0.1.0
+  description: |
+    Backend API для чат-бота и мини-приложения проверки контрольных
+    работ в MAX. Первичный черновик — уточняется совместно с
+    frontend и backend разработчиками.
+servers:
+  - url: /api
+    description: Через nginx proxy мини-приложения
+  - url: http://localhost:8000
+    description: Прямое подключение к backend
+
+paths:
+  /health:
+    get:
+      summary: Проверка живости сервиса
+      responses:
+        "200":
+          description: OK
+
+  /works:
+    post:
+      summary: Создать шаблон работы (тема, задания, эталон)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkTemplateCreate"
+      responses:
+        "201":
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkTemplate"
+    get:
+      summary: Список шаблонов работ учителя
+      parameters:
+        - in: query
+          name: teacher_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorkTemplate" }
+
+  /submissions:
+    post:
+      summary: Загрузить фото работы одного ученика
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [work_id, student_id, photos]
+              properties:
+                work_id: { type: string }
+                student_id: { type: string }
+                photos:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "202":
+          description: Принято на проверку
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Submission" }
+
+    get:
+      summary: Очередь непроверенных работ учителя
+      parameters:
+        - in: query
+          name: teacher_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, checked, confirmed]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Submission" }
+
+  /submissions/{submission_id}:
+    get:
+      summary: Результат проверки одной работы с разметкой
+      parameters:
+        - in: path
+          name: submission_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SubmissionResult" }
+
+  /submissions/{submission_id}/review:
+    patch:
+      summary: Учитель подтверждает или правит вердикт по заданиям
+      parameters:
+        - in: path
+          name: submission_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TeacherReview" }
+      responses:
+        "200":
+          description: OK
+
+  /students/{student_id}/profile:
+    get:
+      summary: Долгосрочный профиль ученика (память)
+      parameters:
+        - in: path
+          name: student_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudentProfile" }
+
+  /classes/{class_id}/dashboard:
+    get:
+      summary: Агрегированная статистика по классу
+      parameters:
+        - in: path
+          name: class_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClassDashboard" }
+
+components:
+  schemas:
+    WorkTemplateCreate:
+      type: object
+      required: [teacher_id, title, grade, tasks]
+      properties:
+        teacher_id: { type: string }
+        title: { type: string, example: "Контрольная №3. Умножение" }
+        subject: { type: string, example: "math" }
+        grade: { type: integer, example: 3 }
+        tasks:
+          type: array
+          items: { $ref: "#/components/schemas/TaskDefinition" }
+
+    WorkTemplate:
+      allOf:
+        - $ref: "#/components/schemas/WorkTemplateCreate"
+        - type: object
+          properties:
+            id: { type: string }
+            created_at: { type: string, format: date-time }
+
+    TaskDefinition:
+      type: object
+      required: [index, statement, expected_answer]
+      properties:
+        index: { type: integer }
+        statement: { type: string }
+        expected_answer: { type: string }
+        max_points: { type: number, default: 1 }
+
+    Submission:
+      type: object
+      properties:
+        id: { type: string }
+        work_id: { type: string }
+        student_id: { type: string }
+        status:
+          type: string
+          enum: [pending, checked, confirmed]
+        created_at: { type: string, format: date-time }
+        photos:
+          type: array
+          items: { type: string, description: "относительный URL" }
+
+    SubmissionResult:
+      allOf:
+        - $ref: "#/components/schemas/Submission"
+        - type: object
+          properties:
+            per_task:
+              type: array
+              items: { $ref: "#/components/schemas/TaskCheck" }
+            total_score: { type: number }
+            confidence: { type: number, description: "средняя уверенность модели, 0..1" }
+
+    TaskCheck:
+      type: object
+      properties:
+        task_index: { type: integer }
+        student_answer: { type: string }
+        expected_answer: { type: string }
+        is_correct: { type: boolean }
+        confidence: { type: number }
+        explanation: { type: string, description: "объяснение ошибки для ученика" }
+        reasoning_graph:
+          type: array
+          description: "шаги решения ученика (если восстановлены)"
+          items:
+            type: object
+            properties:
+              step: { type: string }
+              ok: { type: boolean }
+        photo_boxes:
+          type: array
+          description: "координаты области с ответом на фото"
+          items:
+            type: object
+            properties:
+              photo_index: { type: integer }
+              x: { type: number }
+              y: { type: number }
+              w: { type: number }
+              h: { type: number }
+        teacher_verdict:
+          type: object
+          nullable: true
+          properties:
+            is_correct: { type: boolean }
+            comment: { type: string }
+
+    TeacherReview:
+      type: object
+      properties:
+        per_task:
+          type: array
+          items:
+            type: object
+            required: [task_index, is_correct]
+            properties:
+              task_index: { type: integer }
+              is_correct: { type: boolean }
+              comment: { type: string }
+
+    StudentProfile:
+      type: object
+      properties:
+        student_id: { type: string }
+        submissions_count: { type: integer }
+        avg_score: { type: number }
+        weak_topics:
+          type: array
+          items:
+            type: object
+            properties:
+              topic: { type: string }
+              error_rate: { type: number }
+        recurring_mistakes:
+          type: array
+          items: { type: string }
+        trend:
+          type: string
+          enum: [improving, stable, regressing]
+
+    ClassDashboard:
+      type: object
+      properties:
+        class_id: { type: string }
+        students_count: { type: integer }
+        avg_score: { type: number }
+        weak_topics:
+          type: array
+          items:
+            type: object
+            properties:
+              topic: { type: string }
+              error_rate: { type: number }
+        students_needing_help:
+          type: array
+          items:
+            type: object
+            properties:
+              student_id: { type: string }
+              reason: { type: string }
