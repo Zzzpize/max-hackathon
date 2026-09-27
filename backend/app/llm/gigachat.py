@@ -88,6 +88,7 @@ class GigaChatClient:
                         "task_index": int(item["task_index"]),
                         "answer": str(item["answer"]),
                         "confidence": float(item["confidence"]),
+                        "photo_boxes": item.get("photo_boxes", []),
                     }
                     for item in data["answers"]
                 ]

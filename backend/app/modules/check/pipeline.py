@@ -69,7 +69,7 @@ async def run_check(submission_id: str) -> None:
                     "confidence": confidence,
                     "explanation": verdict["explanation"],
                     "reasoning_graph": verdict["reasoning_graph"],
-                    "photo_boxes": [],
+                    "photo_boxes": answer.get("photo_boxes") or [],
                     "teacher_verdict": None,
                 })
                 if is_correct:
@@ -104,7 +104,6 @@ async def run_check(submission_id: str) -> None:
                     response.raise_for_status()
             except httpx.HTTPError:
                 logger.exception("bot notification failed for %s", submission_id)
-    
     
     except Exception:
         logger.exception("check failed for submission %s", submission_id)

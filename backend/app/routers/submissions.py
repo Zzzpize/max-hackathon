@@ -164,8 +164,9 @@ async def review_submission(
     submission = await session.get(Submission, submission_id)
     if submission is None:
         raise HTTPException(status_code=404, detail="submission not found")
-    if submission.status != SubmissionStatus.checked:
+    if submission.status not in (SubmissionStatus.checked, SubmissionStatus.confirmed):
         raise HTTPException(status_code=409, detail="submission is not checked")
+    already_confirmed = submission.status == SubmissionStatus.confirmed
 
     check = await session.get(CheckResult, submission_id)
     if check is None:
@@ -187,7 +188,8 @@ async def review_submission(
     check.per_task = updated
 
     submission.status = SubmissionStatus.confirmed
+    if not already_confirmed:
+        await on_submission_confirmed(submission_id, session)
     await session.commit()
-    await on_submission_confirmed(submission_id)
 
     return {"status": "ok"}
