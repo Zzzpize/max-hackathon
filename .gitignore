@@ -1,6 +1,7 @@
 .env
 .env.local
 *.env
+!.env.example
 
 __pycache__/
 *.py[cod]
@@ -29,3 +30,11 @@ storage/
 logs/
 
 tmp/
+
+docker-compose.prod.yml
+miniapp/nginx.conf
+
+*.tar.gz
+*.tgz
+*.bak
+*.bak.*
