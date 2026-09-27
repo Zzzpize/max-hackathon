@@ -22,6 +22,7 @@ from app.models import CheckResult, Student, Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
 from app.modules.check.pipeline import run_check
 from app.schemas.submission import SubmissionOut, SubmissionResultOut, TeacherReview
+from app.modules.memory.update import on_submission_confirmed
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 
@@ -177,6 +178,11 @@ async def review_submission(
         updated.append(task)
     check.per_task = updated
 
+    was_confirmed = submission.status == SubmissionStatus.confirmed
     submission.status = SubmissionStatus.confirmed
     await session.commit()
+
+    if not was_confirmed:
+        await on_submission_confirmed(submission_id)
+
     return {"status": "ok"}

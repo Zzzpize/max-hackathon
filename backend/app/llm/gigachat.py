@@ -132,4 +132,37 @@ class GigaChatClient:
         return fallback
 
 
+    async def summarize_mistakes(self, explanations: list[str], system_prompt: str) -> list[str]:
+        if not explanations or not self._credentials:
+            return []
+
+        for attempt in range(2):
+            try:
+                async with self._client() as client:
+                    response = await client.achat({
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {
+                                "role": "user",
+                                "content": json.dumps(explanations, ensure_ascii=False),
+                            },
+                        ],
+                    })
+
+                items = json.loads(response.choices[0].message.content)[
+                    "recurring_mistakes"
+                ]
+                if not isinstance(items, list) or not all(
+                    isinstance(item, str) for item in items
+                ):
+                    raise ValueError("invalid recurring_mistakes")
+                return [item.strip() for item in items[:5] if item.strip()]
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError, IndexError):
+                logger.warning("Invalid memory response, attempt %s", attempt + 1)
+            except httpx.TransportError:
+                logger.warning("Memory request failed, attempt %s", attempt + 1)
+
+        return []
+
+
 gigachat_client = GigaChatClient()
