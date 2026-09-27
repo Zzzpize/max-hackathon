@@ -19,9 +19,9 @@ class Submission(Base):
     __tablename__ = "submissions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
-    work_id: Mapped[str] = mapped_column(String, ForeignKey("work_templates.id"))
-    student_id: Mapped[str] = mapped_column(String, ForeignKey("students.id"))
-    status: Mapped[str] = mapped_column(String, default=SubmissionStatus.pending)
+    work_id: Mapped[str] = mapped_column(String, ForeignKey("work_templates.id"), index=True)
+    student_id: Mapped[str] = mapped_column(String, ForeignKey("students.id"), index=True)
+    status: Mapped[str] = mapped_column(String, default=SubmissionStatus.pending, index=True)
     photos: Mapped[list] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     gigachat_model: str = "GigaChat-2-Max"
     gigachat_verify_ssl_certs: bool = False
 
+    bot_notify_url: str = "http://bot:3000/internal/notify"
+
     @property
     def gigachat_credentials(self) -> str:
         if self.gigachat_auth_key:

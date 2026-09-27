@@ -138,7 +138,10 @@ async def get_submission(
     if submission is None:
         raise HTTPException(status_code=404, detail="submission not found")
 
-    check = await session.get(CheckResult, submission_id)
+    check = (
+        None if submission.status == SubmissionStatus.pending
+        else await session.get(CheckResult, submission_id)
+    )
     return SubmissionResultOut(
         id=submission.id,
         work_id=submission.work_id,
@@ -161,6 +164,8 @@ async def review_submission(
     submission = await session.get(Submission, submission_id)
     if submission is None:
         raise HTTPException(status_code=404, detail="submission not found")
+    if submission.status != SubmissionStatus.checked:
+        raise HTTPException(status_code=409, detail="submission is not checked")
 
     check = await session.get(CheckResult, submission_id)
     if check is None:
@@ -171,18 +176,18 @@ async def review_submission(
     for task in check.per_task:
         verdict = verdict_by_task.get(task["task_index"])
         if verdict is not None:
-            task["teacher_verdict"] = {
-                "is_correct": verdict.is_correct,
-                "comment": verdict.comment,
+            task = {
+                **task,
+                "teacher_verdict": {
+                    "is_correct": verdict.is_correct,
+                    "comment": verdict.comment,
+                },
             }
         updated.append(task)
     check.per_task = updated
 
-    was_confirmed = submission.status == SubmissionStatus.confirmed
     submission.status = SubmissionStatus.confirmed
     await session.commit()
-
-    if not was_confirmed:
-        await on_submission_confirmed(submission_id)
+    await on_submission_confirmed(submission_id)
 
     return {"status": "ok"}

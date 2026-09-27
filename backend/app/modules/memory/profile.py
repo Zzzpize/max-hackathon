@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.llm.gigachat import gigachat_client
 from app.models import CheckResult, Student, Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
-from app.modules.memory.prompts import RECURRING_MISTAKES_SYSTEM
+from app.modules.check.prompts import RECURRING_MISTAKES_SYSTEM
 from app.schemas.student import StudentProfileOut, WeakTopic
 
 
@@ -77,5 +77,26 @@ async def build_profile(
         avg_score=sum(scores) / len(scores) if scores else 0.0,
         weak_topics=weak_topics,
         recurring_mistakes=mistakes,
-        trend="stable",  # Расчёт тренда — отдельный пункт 11.
+        trend=calculate_trend(scores),
     )
+
+
+def calculate_trend(scores: list[float]) -> str:
+    # build_profile собирает оценки от новой submission к старой.
+    recent = scores[:5][::-1]
+    n = len(recent)
+    if n < 3:
+        return "stable"
+
+    mean_x = (n - 1) / 2
+    mean_y = sum(recent) / n
+    slope = sum(
+        (x - mean_x) * (score - mean_y)
+        for x, score in enumerate(recent)
+    ) / sum((x - mean_x) ** 2 for x in range(n))
+
+    if slope > 0.1:
+        return "improving"
+    if slope < -0.1:
+        return "regressing"
+    return "stable"

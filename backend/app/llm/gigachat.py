@@ -1,9 +1,15 @@
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 
 import httpx
+
+from collections import OrderedDict
+from copy import deepcopy
+
+
 from gigachat import GigaChat
 
 from app.config import settings
@@ -17,14 +23,33 @@ class GigaChatClient:
         self._scope = settings.gigachat_scope
         self._model = settings.gigachat_model
         self._verify_ssl = settings.gigachat_verify_ssl_certs
+        self._access_token: str | None = None
+        self._expires_at = 0.0
+        self._token_lock = asyncio.Lock()
 
-    def _client(self) -> GigaChat:
-        return GigaChat(
-            credentials=self._credentials,
-            scope=self._scope,
-            model=self._model,
-            verify_ssl_certs=self._verify_ssl,
-        )
+        self._check_cache: OrderedDict[tuple[str, str, str], dict] = OrderedDict()
+        self._check_cache_lock = asyncio.Lock()
+
+    async def _client(self) -> GigaChat:
+        async with self._token_lock:
+            if self._access_token is None or time.time() >= self._expires_at - 60:
+                async with GigaChat(
+                    credentials=self._credentials,
+                    scope=self._scope,
+                    verify_ssl_certs=self._verify_ssl,
+                ) as auth_client:
+                    await auth_client._aupdate_token()
+                    token = auth_client._access_token
+                    if token is None:
+                        raise RuntimeError("GigaChat не вернул access token")
+                    self._access_token = token.access_token
+                    self._expires_at = token.expires_at / 1000
+
+            return GigaChat(
+                access_token=self._access_token,
+                model=self._model,
+                verify_ssl_certs=self._verify_ssl,
+            )
 
     async def recognize_answers(
         self,
@@ -37,7 +62,7 @@ class GigaChatClient:
 
         for attempt in range(2):
             try:
-                async with self._client() as client:
+                async with await self._client() as client:
                     attachments = []
                     for photo in photos:
                         with photo.open("rb") as file:
@@ -74,8 +99,34 @@ class GigaChatClient:
                     await asyncio.sleep(1)
 
         return []
-
+    
+    
     async def check_task(
+        self,
+        system_prompt: str,
+        statement: str,
+        expected_answer: str,
+        student_answer: str,
+    ) -> dict:
+        key = (statement, expected_answer, student_answer)
+
+        async with self._check_cache_lock:
+            if key in self._check_cache:
+                self._check_cache.move_to_end(key)
+                return deepcopy(self._check_cache[key])
+
+            result = await self._check_task_uncached(
+                system_prompt, statement, expected_answer, student_answer
+            )
+            self._check_cache[key] = deepcopy(result)
+
+            if len(self._check_cache) > 500:
+                self._check_cache.popitem(last=False)
+
+            return deepcopy(result)
+
+    
+    async def _check_task_uncached(
         self,
         system_prompt: str,
         statement: str,
@@ -102,7 +153,7 @@ class GigaChatClient:
 
         for attempt in range(2):
             try:
-                async with self._client() as client:
+                async with await self._client() as client:
                     response = await client.achat({
                         "messages": [
                             {"role": "system", "content": system_prompt},
@@ -138,7 +189,7 @@ class GigaChatClient:
 
         for attempt in range(2):
             try:
-                async with self._client() as client:
+                async with await self._client() as client:
                     response = await client.achat({
                         "messages": [
                             {"role": "system", "content": system_prompt},

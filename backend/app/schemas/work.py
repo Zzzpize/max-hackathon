@@ -9,7 +9,7 @@ class TaskDefinition(BaseModel):
     index: int
     statement: str
     expected_answer: str
-    max_points: float = 1.0
+    max_points: float = Field(default=1.0, ge=0)
 
     @field_validator("expected_answer")
     @classmethod
@@ -25,7 +25,7 @@ class WorkTemplateCreate(BaseModel):
     title: str
     subject: str = "math"
     grade: int
-    tasks: list[TaskDefinition] = Field(default_factory=list)
+    tasks: list[TaskDefinition]
 
     @model_validator(mode="after")
     def task_indexes_must_be_unique(self) -> Self:
