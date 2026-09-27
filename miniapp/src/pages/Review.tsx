@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, type SubmissionResult } from "../api/client";
+import { useTeacherId } from "../max/useTeacherId";
 
 export function Review() {
   const { submissionId = "" } = useParams();
+  const teacherId = useTeacherId();
   const [data, setData] = useState<SubmissionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.getSubmission(submissionId).then(setData).catch((e) => setError(String(e)));
-  }, [submissionId]);
+    api
+      .getSubmission(submissionId, teacherId)
+      .then(setData)
+      .catch((e) => setError(String(e)));
+  }, [submissionId, teacherId]);
 
   if (error) return <p style={{ padding: 16, color: "crimson" }}>{error}</p>;
   if (!data) return <p style={{ padding: 16 }}>Загрузка…</p>;
@@ -29,6 +34,7 @@ export function Review() {
     try {
       await api.reviewSubmission(
         submissionId,
+        teacherId,
         data.per_task.map((t) => ({ task_index: t.task_index, is_correct: t.is_correct }))
       );
       history.back();

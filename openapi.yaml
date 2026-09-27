@@ -1,11 +1,19 @@
 openapi: 3.0.3
 info:
   title: Помощник учителя API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Backend API для чат-бота и мини-приложения проверки контрольных
-    работ в MAX. Первичный черновик — уточняется совместно с
-    frontend и backend разработчиками.
+    работ в MAX.
+
+    Мульти-тенантность: все ресурсы (работы, submissions, ученики,
+    профили) принадлежат конкретному учителю. `teacher_id` - это
+    `user_id` учителя в MAX. Клиент передаёт его в query-параметре
+    (или form-data для POST). Валидация MAX initData на бэкенде -
+    P1 (задача 37 в 03_tz_backend.md).
+
+    Кросс-тенантный доступ запрещён: попытка чтения/изменения
+    чужого ресурса → 403.
 servers:
   - url: /api
     description: Через nginx proxy мини-приложения
@@ -39,10 +47,7 @@ paths:
     get:
       summary: Список шаблонов работ учителя
       parameters:
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
       responses:
         "200":
           description: OK
@@ -51,6 +56,24 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/WorkTemplate" }
+
+  /works/{work_id}:
+    get:
+      summary: Получить шаблон работы
+      parameters:
+        - in: path
+          name: work_id
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkTemplate" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /submissions:
     post:
@@ -61,8 +84,9 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [work_id, student_id, photos]
+              required: [teacher_id, work_id, student_id, photos]
               properties:
+                teacher_id: { type: string }
                 work_id: { type: string }
                 student_id: { type: string }
                 photos:
@@ -76,14 +100,12 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Submission" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
     get:
-      summary: Очередь непроверенных работ учителя
+      summary: Очередь работ учителя
       parameters:
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
         - in: query
           name: status
           schema:
@@ -106,12 +128,15 @@ paths:
           name: submission_id
           required: true
           schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SubmissionResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /submissions/{submission_id}/review:
     patch:
@@ -121,6 +146,7 @@ paths:
           name: submission_id
           required: true
           schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
       requestBody:
         required: true
         content:
@@ -129,6 +155,38 @@ paths:
       responses:
         "200":
           description: OK
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /students:
+    post:
+      summary: Создать ученика в классе учителя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudentCreate" }
+      responses:
+        "201":
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Student" }
+    get:
+      summary: Список учеников учителя (опционально по классу)
+      parameters:
+        - $ref: "#/components/parameters/TeacherId"
+        - in: query
+          name: class_id
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Student" }
 
   /students/{student_id}/profile:
     get:
@@ -138,19 +196,27 @@ paths:
           name: student_id
           required: true
           schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StudentProfile" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
-  /classes/{class_id}/dashboard:
+  /teachers/{teacher_id}/state:
     get:
-      summary: Агрегированная статистика по классу
+      summary: Текущий контекст учителя (выбранная работа и ученик)
+      description: |
+        Общий стейт для бота и мини-приложения. Когда учитель выбирает
+        работу или ученика в MiniApp, состояние сохраняется здесь, и
+        бот при получении фото читает то же самое. Наоборот - если
+        учитель выбрал через бота, MiniApp увидит.
       parameters:
         - in: path
-          name: class_id
+          name: teacher_id
           required: true
           schema: { type: string }
       responses:
@@ -158,9 +224,76 @@ paths:
           description: OK
           content:
             application/json:
+              schema: { $ref: "#/components/schemas/TeacherState" }
+    put:
+      summary: Установить текущую работу и/или ученика
+      parameters:
+        - in: path
+          name: teacher_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                current_work_id: { type: string, nullable: true }
+                current_student_id: { type: string, nullable: true }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeacherState" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /classes/{class_id}/dashboard:
+    get:
+      summary: Агрегированная статистика по классу учителя
+      parameters:
+        - in: path
+          name: class_id
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/TeacherId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
               schema: { $ref: "#/components/schemas/ClassDashboard" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
 components:
+  parameters:
+    TeacherId:
+      in: query
+      name: teacher_id
+      required: true
+      description: MAX user_id учителя, вызывающего endpoint
+      schema: { type: string }
+
+  responses:
+    Forbidden:
+      description: Ресурс принадлежит другому учителю
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: string }
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              detail: { type: string }
+
   schemas:
     WorkTemplateCreate:
       type: object
@@ -190,6 +323,31 @@ components:
         statement: { type: string }
         expected_answer: { type: string }
         max_points: { type: number, default: 1 }
+
+    StudentCreate:
+      type: object
+      required: [teacher_id, class_id, display_name, grade]
+      properties:
+        teacher_id: { type: string }
+        class_id: { type: string, example: "3-А" }
+        display_name: { type: string, example: "Иванов П." }
+        grade: { type: integer, example: 3 }
+
+    Student:
+      allOf:
+        - $ref: "#/components/schemas/StudentCreate"
+        - type: object
+          properties:
+            id: { type: string }
+            created_at: { type: string, format: date-time }
+
+    TeacherState:
+      type: object
+      properties:
+        teacher_id: { type: string }
+        current_work_id: { type: string, nullable: true }
+        current_student_id: { type: string, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     Submission:
       type: object

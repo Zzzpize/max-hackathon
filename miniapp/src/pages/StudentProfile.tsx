@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, type StudentProfile as Profile } from "../api/client";
+import { useTeacherId } from "../max/useTeacherId";
 
 export function StudentProfile() {
   const { studentId = "" } = useParams();
+  const teacherId = useTeacherId();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getStudentProfile(studentId).then(setProfile).catch((e) => setError(String(e)));
-  }, [studentId]);
+    api
+      .getStudentProfile(studentId, teacherId)
+      .then(setProfile)
+      .catch((e) => setError(String(e)));
+  }, [studentId, teacherId]);
 
   if (error) return <p style={{ padding: 16, color: "crimson" }}>{error}</p>;
   if (!profile) return <p style={{ padding: 16 }}>Загрузка…</p>;
@@ -27,7 +32,7 @@ export function StudentProfile() {
           <ul>
             {profile.weak_topics.map((t) => (
               <li key={t.topic}>
-                {t.topic} — {(t.error_rate * 100).toFixed(0)}% ошибок
+                {t.topic} - {(t.error_rate * 100).toFixed(0)}% ошибок
               </li>
             ))}
           </ul>

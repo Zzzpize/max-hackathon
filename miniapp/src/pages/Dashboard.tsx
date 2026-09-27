@@ -1,14 +1,23 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { api } from "../api/client";
+import { api, type ClassDashboard } from "../api/client";
+import { useTeacherId } from "../max/useTeacherId";
 
 export function Dashboard() {
   const { classId = "" } = useParams();
-  const [data, setData] = useState<unknown>(null);
+  const teacherId = useTeacherId();
+  const [data, setData] = useState<ClassDashboard | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getClassDashboard(classId).then(setData).catch(() => setData(null));
-  }, [classId]);
+    api
+      .getClassDashboard(classId, teacherId)
+      .then(setData)
+      .catch((e) => setError(String(e)));
+  }, [classId, teacherId]);
+
+  if (error) return <p style={{ padding: 16, color: "crimson" }}>{error}</p>;
+  if (!data) return <p style={{ padding: 16 }}>Загрузка…</p>;
 
   return (
     <div style={{ padding: 16 }}>
@@ -16,7 +25,6 @@ export function Dashboard() {
       <pre style={{ background: "#fff", padding: 12, borderRadius: 12 }}>
         {JSON.stringify(data, null, 2)}
       </pre>
-      {/* TODO(frontend): визуализация слабых тем, ленты активности, экспорт отчёта */}
     </div>
   );
 }

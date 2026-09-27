@@ -1,7 +1,6 @@
 import type { Context } from "@maxhub/max-bot-api";
-import { createSubmission, downloadPhoto } from "../api.js";
+import { createSubmission, downloadPhoto, getState } from "../api.js";
 import { kb, openMiniappButton } from "../max.js";
-import { getState } from "../state.js";
 
 export async function handlePhoto(ctx: Context): Promise<boolean> {
   const attachments = ctx.message?.body?.attachments ?? [];
@@ -12,11 +11,18 @@ export async function handlePhoto(ctx: Context): Promise<boolean> {
 
   const userId = ctx.message?.sender?.user_id;
   if (!userId) return false;
-  const state = getState(userId);
 
-  if (!state.workId || !state.studentId) {
+  let state;
+  try {
+    state = await getState(String(userId));
+  } catch {
+    await ctx.reply("Не удалось прочитать текущий выбор. Попробуй ещё раз.");
+    return true;
+  }
+
+  if (!state.current_work_id || !state.current_student_id) {
     await ctx.reply(
-      "Сначала выбери работу и ученика в мини-приложении, потом присылай фото.",
+      "Сначала выбери работу (/work) и ученика (/student) - или открой мини-приложение.",
       { attachments: [kb.inlineKeyboard([[openMiniappButton("Открыть")]])] }
     );
     return true;
@@ -37,8 +43,9 @@ export async function handlePhoto(ctx: Context): Promise<boolean> {
 
   try {
     const submission = await createSubmission({
-      workId: state.workId,
-      studentId: state.studentId,
+      teacherId: String(userId),
+      workId: state.current_work_id,
+      studentId: state.current_student_id,
       photos,
     });
 
