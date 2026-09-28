@@ -1,6 +1,6 @@
+import logging
 import shutil
 from pathlib import Path
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import delete, select
@@ -15,6 +15,7 @@ from app.config import settings
 from app.models import CheckResult, Student, StudentProfile, Submission
 
 router = APIRouter(prefix="/students", tags=["students"])
+logger = logging.getLogger(__name__)
 
 @router.post("", response_model=StudentOut, status_code=201)
 async def create_student(
@@ -59,6 +60,12 @@ async def delete_student(
             )
         ).all())
 
+        if any(
+            Path(submission_id).name != submission_id or submission_id in (".", "..")
+            for submission_id in submission_ids
+        ):
+            raise HTTPException(status_code=500, detail="invalid submission id")
+
         if submission_ids:
             await session.execute(
                 delete(CheckResult).where(CheckResult.submission_id.in_(submission_ids))
@@ -73,8 +80,18 @@ async def delete_student(
         await session.delete(student)
 
     storage = Path(settings.storage_dir)
+    cleanup_failed = False
     for submission_id in submission_ids:
-        shutil.rmtree(storage / str(UUID(submission_id)), ignore_errors=True)
+        try:
+            shutil.rmtree(storage / submission_id)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.exception("Photo cleanup failed for submission %s", submission_id)
+            cleanup_failed = True
+
+    if cleanup_failed:
+        raise HTTPException(status_code=500, detail="student deleted but photo cleanup failed")
 
     return Response(status_code=204)
 

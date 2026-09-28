@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.db import Base, engine, get_session
 from app.models import Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
@@ -13,8 +14,9 @@ from app.routers import stats, students, submissions, works
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if settings.dev_auto_create_tables:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
     yield
 
 

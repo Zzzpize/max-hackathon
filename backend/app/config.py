@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://checker:checker@postgres:5432/checker"
     storage_dir: str = "/app/storage"
+    dev_auto_create_tables: bool = False
 
     gigachat_client_id: str = ""
     gigachat_client_secret: str = ""
