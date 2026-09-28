@@ -45,7 +45,8 @@ def auth_headers(monkeypatch):
 
 
 @pytest_asyncio.fixture
-async def sessions(monkeypatch):
+async def sessions(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "storage_dir", str(tmp_path))
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:", poolclass=StaticPool
     )

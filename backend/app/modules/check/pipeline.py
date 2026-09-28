@@ -19,7 +19,7 @@ async def run_check(submission_id: str) -> None:
             if submission is None:
                 logger.warning("submission %s not found", submission_id)
                 return
-            if submission.status == SubmissionStatus.confirmed:
+            if submission.status != SubmissionStatus.pending:
                 return
 
             work = await session.get(WorkTemplate, submission.work_id)
@@ -50,6 +50,7 @@ async def run_check(submission_id: str) -> None:
                         "correct": False,
                         "explanation": "Требуется ручная проверка",
                         "reasoning_graph": [],
+                        "error_type": "не распознано",
                     }
                 else:
                     verdict = await gigachat_client.check_task(
@@ -68,6 +69,7 @@ async def run_check(submission_id: str) -> None:
                     "is_correct": is_correct,
                     "confidence": confidence,
                     "explanation": verdict["explanation"],
+                    "error_type": verdict.get("error_type"),
                     "reasoning_graph": verdict["reasoning_graph"],
                     "photo_boxes": answer.get("photo_boxes") or [],
                     "teacher_verdict": None,

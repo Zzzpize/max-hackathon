@@ -3,9 +3,11 @@ from io import BytesIO
 import httpx
 import pytest
 from PIL import Image
+from unittest.mock import AsyncMock
 
 from app.main import app
 from app.models import CheckResult, Student, Submission, WorkTemplate
+from app.routers import submissions as submission_router
 
 
 @pytest.mark.asyncio
@@ -56,7 +58,7 @@ async def test_cross_tenant_denied(sessions, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_create_student_and_submission_owner(sessions, auth_headers):
+async def test_create_student_and_submission_owner(sessions, auth_headers, monkeypatch):
     async with sessions() as session:
         session.add(WorkTemplate(id="work-a", teacher_id="1", title="A", grade=2, tasks=[]))
         await session.commit()
@@ -70,9 +72,26 @@ async def test_create_student_and_submission_owner(sessions, auth_headers):
         assert created.status_code == 201
         assert created.json()["teacher_id"] == "1"
         student_id = created.json()["id"]
+        async with sessions() as session:
+            stored = await session.get(Student, student_id)
+            assert stored.display_name.startswith("sha256:")
+            assert stored.display_name != "A"
+        listed = await client.get("/students")
+        assert listed.json()[0]["display_name"] == "A"
         assert (await client.post(
             "/submissions",
             data={"work_id": "work-a", "student_id": student_id, "teacher_id": "1"},
             files={"photos": ("work.png", photo.getvalue(), "image/png")},
             headers=auth_headers(2),
         )).status_code == 403
+
+        enqueue = AsyncMock()
+        monkeypatch.setattr(submission_router, "enqueue_check", enqueue)
+        accepted = await client.post(
+            "/submissions",
+            data={"work_id": "work-a", "student_id": student_id},
+            files={"photos": ("work.png", photo.getvalue(), "image/png")},
+        )
+        assert accepted.status_code == 202
+        assert accepted.json()["status"] == "pending"
+        enqueue.assert_awaited_once_with(accepted.json()["id"])

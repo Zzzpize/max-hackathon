@@ -6,11 +6,8 @@ info:
     Backend API для чат-бота и мини-приложения проверки контрольных
     работ в MAX.
 
-    Мульти-тенантность: все ресурсы (работы, submissions, ученики,
-    профили) принадлежат конкретному учителю. `teacher_id` - это
-    `user_id` учителя в MAX. Клиент передаёт его в query-параметре
-    (или form-data для POST). Валидация MAX initData на бэкенде -
-    P1 (задача 37 в 03_tz_backend.md).
+    Все ресурсы принадлежат учителю. Backend проверяет MAX initData
+    из заголовка X-Init-Data и берёт teacher_id из подписанного user.id.
 
     Кросс-тенантный доступ запрещён: попытка чтения/изменения
     чужого ресурса → 403.
@@ -19,11 +16,14 @@ servers:
     description: Через nginx proxy мини-приложения
   - url: http://localhost:8000
     description: Прямое подключение к backend
+security:
+  - MaxInitData: []
 
 paths:
   /health:
     get:
       summary: Проверка живости сервиса
+      security: []
       responses:
         "200":
           description: OK
@@ -47,7 +47,12 @@ paths:
     get:
       summary: Список шаблонов работ учителя
       parameters:
-        - $ref: "#/components/parameters/TeacherId"
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, minimum: 1 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0, minimum: 0 }
       responses:
         "200":
           description: OK
@@ -60,12 +65,6 @@ paths:
   /works/generate:
     post:
       summary: Сгенерировать и сохранить контрольную работу
-      parameters:
-        - in: header
-          name: X-Init-Data
-          required: true
-          description: Подписанный initData учителя из MAX
-          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -90,10 +89,6 @@ paths:
           name: work_id
           required: true
           schema: { type: string }
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
       responses:
         "200":
           description: OK
@@ -110,12 +105,10 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [teacher_id, work_id, student_id, photos]
+              required: [work_id, student_id, photos]
               properties:
-                teacher_id: { type: string }
                 work_id: { type: string }
                 student_id: { type: string }
-                teacher_id: { type: string, description: "Необязательная проверка владельца работы и ученика" }
                 photos:
                   type: array
                   items:
@@ -132,7 +125,6 @@ paths:
     get:
       summary: Очередь работ учителя
       parameters:
-        - $ref: "#/components/parameters/TeacherId"
         - in: query
           name: status
           schema:
@@ -155,10 +147,6 @@ paths:
           name: submission_id
           required: true
           schema: { type: string }
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
       responses:
         "200":
           description: OK
@@ -174,10 +162,6 @@ paths:
       parameters:
         - in: path
           name: submission_id
-          required: true
-          schema: { type: string }
-        - in: query
-          name: teacher_id
           required: true
           schema: { type: string }
       requestBody:
@@ -206,42 +190,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Student" }
     get:
-      summary: Список учеников учителя (опционально по классу)
-      parameters:
-        - $ref: "#/components/parameters/TeacherId"
-        - in: query
-          name: class_id
-          schema: { type: string }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: "#/components/schemas/Student" }
-
-  /students:
-    post:
-      summary: Создать ученика учителя
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/StudentCreate" }
-      responses:
-        "201":
-          description: Создано
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Student" }
-    get:
       summary: Список учеников учителя
-      parameters:
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
       responses:
         "200":
           description: OK
@@ -257,10 +206,6 @@ paths:
       parameters:
         - in: path
           name: student_id
-          required: true
-          schema: { type: string }
-        - in: query
-          name: teacher_id
           required: true
           schema: { type: string }
       responses:
@@ -280,61 +225,9 @@ paths:
           name: student_id
           required: true
           schema: { type: string }
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
       responses:
         "204":
           description: Удалено
-
-  /classes/{class_id}/dashboard:
-    get:
-      summary: Текущий контекст учителя (выбранная работа и ученик)
-      description: |
-        Общий стейт для бота и мини-приложения. Когда учитель выбирает
-        работу или ученика в MiniApp, состояние сохраняется здесь, и
-        бот при получении фото читает то же самое. Наоборот - если
-        учитель выбрал через бота, MiniApp увидит.
-      parameters:
-        - in: path
-          name: teacher_id
-          required: true
-          schema: { type: string }
-        - in: query
-          name: teacher_id
-          required: true
-          schema: { type: string }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TeacherState" }
-    put:
-      summary: Установить текущую работу и/или ученика
-      parameters:
-        - in: path
-          name: teacher_id
-          required: true
-          schema: { type: string }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                current_work_id: { type: string, nullable: true }
-                current_student_id: { type: string, nullable: true }
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/TeacherState" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
 
   /classes/{class_id}/dashboard:
     get:
@@ -344,7 +237,6 @@ paths:
           name: class_id
           required: true
           schema: { type: string }
-        - $ref: "#/components/parameters/TeacherId"
       responses:
         "200":
           description: OK
@@ -354,13 +246,11 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
 
 components:
-  parameters:
-    TeacherId:
-      in: query
-      name: teacher_id
-      required: true
-      description: MAX user_id учителя, вызывающего endpoint
-      schema: { type: string }
+  securitySchemes:
+    MaxInitData:
+      type: apiKey
+      in: header
+      name: X-Init-Data
 
   responses:
     Forbidden:
@@ -399,9 +289,8 @@ components:
 
     StudentCreate:
       type: object
-      required: [teacher_id, class_id, display_name, grade]
+      required: [class_id, display_name, grade]
       properties:
-        teacher_id: { type: string }
         class_id: { type: string }
         display_name: { type: string }
         grade: { type: integer }
@@ -412,13 +301,13 @@ components:
         - type: object
           properties:
             id: { type: string }
+            teacher_id: { type: string }
             created_at: { type: string, format: date-time }
 
     WorkTemplateCreate:
       type: object
-      required: [teacher_id, title, grade, tasks]
+      required: [title, grade, tasks]
       properties:
-        teacher_id: { type: string }
         title: { type: string, example: "Контрольная №3. Умножение" }
         subject: { type: string, example: "math" }
         grade: { type: integer, example: 3 }
@@ -432,6 +321,7 @@ components:
         - type: object
           properties:
             id: { type: string }
+            teacher_id: { type: string }
             created_at: { type: string, format: date-time }
 
     TaskDefinition:
@@ -442,31 +332,6 @@ components:
         statement: { type: string }
         expected_answer: { type: string }
         max_points: { type: number, default: 1 }
-
-    StudentCreate:
-      type: object
-      required: [teacher_id, class_id, display_name, grade]
-      properties:
-        teacher_id: { type: string }
-        class_id: { type: string, example: "3-А" }
-        display_name: { type: string, example: "Иванов П." }
-        grade: { type: integer, example: 3 }
-
-    Student:
-      allOf:
-        - $ref: "#/components/schemas/StudentCreate"
-        - type: object
-          properties:
-            id: { type: string }
-            created_at: { type: string, format: date-time }
-
-    TeacherState:
-      type: object
-      properties:
-        teacher_id: { type: string }
-        current_work_id: { type: string, nullable: true }
-        current_student_id: { type: string, nullable: true }
-        updated_at: { type: string, format: date-time, nullable: true }
 
     Submission:
       type: object
@@ -502,6 +367,10 @@ components:
         is_correct: { type: boolean }
         confidence: { type: number }
         explanation: { type: string, description: "объяснение ошибки для ученика" }
+        error_type:
+          type: string
+          nullable: true
+          enum: [вычислительная, методологическая, невнимательность, "не распознано"]
         reasoning_graph:
           type: array
           description: "шаги решения ученика (если восстановлены)"

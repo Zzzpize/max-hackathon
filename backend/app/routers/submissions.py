@@ -1,11 +1,11 @@
 from io import BytesIO
+import logging
 from pathlib import Path
 import shutil
 from uuid import uuid4
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -13,6 +13,7 @@ from fastapi import (
     UploadFile,
 )
 from PIL import Image
+from redis.exceptions import RedisError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,11 +22,12 @@ from app.config import settings
 from app.db import get_session
 from app.models import CheckResult, Student, Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
-from app.modules.check.pipeline import run_check
+from app.modules.check.queue import enqueue_check
 from app.schemas.submission import SubmissionOut, SubmissionResultOut, TeacherReview
 from app.modules.memory.update import on_submission_confirmed
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
+logger = logging.getLogger(__name__)
 
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
 PHOTO_TYPES = {
@@ -37,7 +39,6 @@ PHOTO_TYPES = {
 
 @router.post("", response_model=SubmissionOut, status_code=202)
 async def create_submission(
-    background: BackgroundTasks,
     work_id: str = Form(...),
     student_id: str = Form(...),
     teacher_id: str = Depends(current_teacher),
@@ -113,7 +114,10 @@ async def create_submission(
         raise
 
     await session.refresh(submission)
-    background.add_task(run_check, submission_id)
+    try:
+        await enqueue_check(submission_id)
+    except RedisError:
+        logger.exception("check queue unavailable for submission %s", submission_id)
     return submission
 
 
@@ -188,6 +192,11 @@ async def review_submission(
     if check is None:
         raise HTTPException(status_code=409, detail="not yet checked")
 
+    expected_indexes = {task["task_index"] for task in check.per_task}
+    submitted_indexes = [item.task_index for item in review.per_task]
+    if len(submitted_indexes) != len(set(submitted_indexes)) or set(submitted_indexes) != expected_indexes:
+        raise HTTPException(status_code=422, detail="review must cover each task exactly once")
+
     verdict_by_task = {item.task_index: item for item in review.per_task}
     updated = []
     for task in check.per_task:
@@ -201,10 +210,10 @@ async def review_submission(
                 },
             }
         updated.append(task)
+    changed = updated != check.per_task
     check.per_task = updated
-
     submission.status = SubmissionStatus.confirmed
-    if not already_confirmed:
+    if not already_confirmed or changed:
         await on_submission_confirmed(submission_id, session)
     await session.commit()
 

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.llm.gigachat import gigachat_client
 from app.models import CheckResult, Student, Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
-from app.modules.check.prompts import RECURRING_MISTAKES_SYSTEM
+from app.modules.memory.prompts import RECURRING_MISTAKES_SYSTEM
 from app.schemas.student import StudentProfileOut, WeakTopic
 
 

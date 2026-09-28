@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from app.main import app
-from app.models import Student, StudentProfile, Submission, WorkTemplate
+from app.models import CheckResult, Student, StudentProfile, Submission, WorkTemplate
 from app.modules.check import pipeline
 from app.modules.memory import profile
 from app.routers import submissions as submission_router
@@ -32,6 +32,7 @@ async def test_submission_lifecycle(sessions, monkeypatch, tmp_path, auth_header
         await session.commit()
 
     monkeypatch.setattr(submission_router.settings, "storage_dir", str(tmp_path))
+    monkeypatch.setattr(submission_router, "enqueue_check", pipeline.run_check)
     monkeypatch.setattr(
         pipeline.gigachat_client,
         "recognize_answers",
@@ -144,6 +145,52 @@ async def test_review_rolls_back_when_profile_update_fails(sessions, monkeypatch
         saved = await session.get(Submission, "submission-1")
         assert saved.status == "checked"
         assert await session.get(StudentProfile, "student-1") is None
+
+
+@pytest.mark.asyncio
+async def test_review_requires_every_task_and_updates_profile_after_correction(
+    sessions, monkeypatch, auth_headers
+):
+    monkeypatch.setattr(profile.gigachat_client, "summarize_mistakes", AsyncMock(return_value=[]))
+    async with sessions() as session:
+        session.add_all([
+            Student(id="student-1", teacher_id="1", class_id="2A", display_name="A", grade=2),
+            WorkTemplate(id="work-1", teacher_id="1", title="Сложение", grade=2, tasks=[
+                {"index": 1, "statement": "1+1", "expected_answer": "2", "max_points": 1},
+                {"index": 2, "statement": "2+2", "expected_answer": "4", "max_points": 1},
+            ]),
+            Submission(id="submission-1", work_id="work-1", student_id="student-1", status="checked"),
+            CheckResult(submission_id="submission-1", per_task=[
+                {"task_index": 1, "teacher_verdict": None},
+                {"task_index": 2, "teacher_verdict": None},
+            ]),
+        ])
+        await session.commit()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test", headers=auth_headers(1)
+    ) as client:
+        url = "/submissions/submission-1/review"
+        assert (await client.patch(url, json={"per_task": [
+            {"task_index": 1, "is_correct": True}
+        ]})).status_code == 422
+        assert (await client.patch(url, json={"per_task": [
+            {"task_index": 1, "is_correct": True},
+            {"task_index": 1, "is_correct": False},
+        ]})).status_code == 422
+        assert (await client.patch(url, json={"per_task": [
+            {"task_index": 1, "is_correct": True},
+            {"task_index": 2, "is_correct": False},
+        ]})).status_code == 200
+        assert (await client.patch(url, json={"per_task": [
+            {"task_index": 1, "is_correct": True},
+            {"task_index": 2, "is_correct": True},
+        ]})).status_code == 200
+
+    async with sessions() as session:
+        saved = await session.get(StudentProfile, "student-1")
+        assert saved.submissions_count == 1
+        assert saved.avg_score == 2
 
 
 @pytest.mark.asyncio

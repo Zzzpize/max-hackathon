@@ -37,7 +37,7 @@ async def test_pipeline_with_stub_llm(sessions, monkeypatch):
     ])
     check = AsyncMock(side_effect=[
         {"correct": True, "explanation": "", "reasoning_graph": []},
-        {"correct": False, "explanation": "Ошибка", "reasoning_graph": []},
+        {"correct": False, "explanation": "Ошибка", "reasoning_graph": [], "error_type": "вычислительная"},
     ])
     monkeypatch.setattr(pipeline.gigachat_client, "recognize_answers", recognize)
     monkeypatch.setattr(pipeline.gigachat_client, "check_task", check)
@@ -67,6 +67,7 @@ async def test_pipeline_with_stub_llm(sessions, monkeypatch):
         assert [task["task_index"] for task in result.per_task] == [1, 2]
         assert result.total_score == 2
         assert result.confidence == pytest.approx(0.8)
+        assert result.per_task[1]["error_type"] == "вычислительная"
     assert check.await_count == 2
     assert post.await_args.kwargs["json"] == {
         "teacher_id": "teacher-1",

@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,7 @@ from app.config import settings
 from app.db import Base, engine, get_session
 from app.models import Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
+from app.modules.check.queue import worker
 from app.routers import stats, students, submissions, works
 
 
@@ -17,7 +19,13 @@ async def lifespan(_: FastAPI):
     if settings.dev_auto_create_tables:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    yield
+    check_worker = asyncio.create_task(worker())
+    try:
+        yield
+    finally:
+        check_worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await check_worker
 
 
 app = FastAPI(

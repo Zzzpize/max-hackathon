@@ -1,6 +1,7 @@
 import logging
 import shutil
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import delete, select
@@ -13,6 +14,7 @@ from app.schemas.student import StudentCreate, StudentOut, StudentProfileOut
 
 from app.config import settings
 from app.models import CheckResult, Student, StudentProfile, Submission
+from app.student_names import get_name, name_hash, save_name
 
 router = APIRouter(prefix="/students", tags=["students"])
 logger = logging.getLogger(__name__)
@@ -22,23 +24,37 @@ async def create_student(
     payload: StudentCreate,
     session: AsyncSession = Depends(get_session),
     teacher_id: str = Depends(current_teacher),
-) -> Student:
-    student = Student(**payload.model_dump(), teacher_id=teacher_id)
+) -> StudentOut:
+    student_id = str(uuid4())
+    student = Student(
+        id=student_id, teacher_id=teacher_id, class_id=payload.class_id,
+        display_name=name_hash(student_id, payload.display_name), grade=payload.grade,
+    )
+    save_name(teacher_id, student.id, payload.display_name)
     session.add(student)
-    await session.commit()
+    try:
+        await session.commit()
+    except Exception:
+        save_name(teacher_id, student.id, None)
+        raise
     await session.refresh(student)
-    return student
+    return StudentOut.model_validate(student).model_copy(update={"display_name": payload.display_name})
 
 
 @router.get("", response_model=list[StudentOut])
 async def list_students(
     teacher_id: str = Depends(current_teacher),
     session: AsyncSession = Depends(get_session),
-) -> list[Student]:
+) -> list[StudentOut]:
     result = await session.scalars(
         select(Student).where(Student.teacher_id == teacher_id).order_by(Student.created_at, Student.id)
     )
-    return list(result.all())
+    return [
+        StudentOut.model_validate(student).model_copy(update={
+            "display_name": get_name(teacher_id, student.id, student.display_name)
+        })
+        for student in result.all()
+    ]
 
 
 @router.delete("/{student_id}", status_code=204)
@@ -90,6 +106,7 @@ async def delete_student(
             logger.exception("Photo cleanup failed for submission %s", submission_id)
             cleanup_failed = True
 
+    save_name(teacher_id, student_id, None)
     if cleanup_failed:
         raise HTTPException(status_code=500, detail="student deleted but photo cleanup failed")
 

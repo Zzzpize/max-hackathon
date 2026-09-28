@@ -2,19 +2,19 @@ import asyncio
 import json
 import logging
 import time
+import hashlib
 from pathlib import Path
 
 import httpx
 
-from collections import OrderedDict
-from copy import deepcopy
-
-
 from gigachat import GigaChat
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+ERROR_TYPES = {"вычислительная", "методологическая", "невнимательность", "не распознано"}
 
 
 class GigaChatClient:
@@ -27,8 +27,7 @@ class GigaChatClient:
         self._expires_at = 0.0
         self._token_lock = asyncio.Lock()
 
-        self._check_cache: OrderedDict[tuple[str, str, str], dict] = OrderedDict()
-        self._check_cache_lock = asyncio.Lock()
+        self._redis = Redis.from_url(settings.redis_url, decode_responses=True)
 
     async def _client(self) -> GigaChat:
         async with self._token_lock:
@@ -109,22 +108,31 @@ class GigaChatClient:
         expected_answer: str,
         student_answer: str,
     ) -> dict:
-        key = (statement, expected_answer, student_answer)
+        key = hashlib.sha256(json.dumps(
+            [statement, expected_answer, student_answer], ensure_ascii=False
+        ).encode()).hexdigest()
+        try:
+            async with self._redis.lock("check:cache:lock", timeout=120):
+                cached = await self._redis.hget("check:cache", key)
+                if cached is not None:
+                    await self._redis.zadd("check:cache:lru", {key: time.time_ns()})
+                    return json.loads(cached)
 
-        async with self._check_cache_lock:
-            if key in self._check_cache:
-                self._check_cache.move_to_end(key)
-                return deepcopy(self._check_cache[key])
-
-            result = await self._check_task_uncached(
+                result = await self._check_task_uncached(
+                    system_prompt, statement, expected_answer, student_answer
+                )
+                await self._redis.hset("check:cache", key, json.dumps(result, ensure_ascii=False))
+                await self._redis.zadd("check:cache:lru", {key: time.time_ns()})
+                old = await self._redis.zrange("check:cache:lru", 0, -501)
+                if old:
+                    await self._redis.hdel("check:cache", *old)
+                    await self._redis.zrem("check:cache:lru", *old)
+                return result
+        except RedisError:
+            logger.warning("Redis cache unavailable; checking task without cache")
+            return await self._check_task_uncached(
                 system_prompt, statement, expected_answer, student_answer
             )
-            self._check_cache[key] = deepcopy(result)
-
-            if len(self._check_cache) > 500:
-                self._check_cache.popitem(last=False)
-
-            return deepcopy(result)
 
     
     async def _check_task_uncached(
@@ -138,6 +146,7 @@ class GigaChatClient:
             "correct": student_answer.strip() == expected_answer.strip(),
             "explanation": "",
             "reasoning_graph": [],
+            "error_type": None,
         }
         if not self._credentials:
             logger.warning("GigaChat credentials not set")
@@ -169,10 +178,18 @@ class GigaChatClient:
                     raise ValueError("explanation must be string")
                 if not isinstance(data["reasoning_graph"], list):
                     raise ValueError("reasoning_graph must be list")
+                error_type = data["error_type"]
+                if error_type is not None and error_type not in ERROR_TYPES:
+                    raise ValueError("invalid error_type")
+                if data["correct"] and error_type is not None:
+                    raise ValueError("correct answer cannot have error_type")
+                if not data["correct"] and error_type is None:
+                    raise ValueError("incorrect answer needs error_type")
                 return {
                     "correct": data["correct"],
                     "explanation": data["explanation"],
                     "reasoning_graph": data["reasoning_graph"],
+                    "error_type": error_type,
                 }
             except (json.JSONDecodeError, KeyError, TypeError, ValueError, IndexError):
                 logger.warning("Invalid GigaChat check response, attempt %s", attempt + 1)
