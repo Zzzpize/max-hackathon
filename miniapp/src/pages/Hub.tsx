@@ -7,6 +7,7 @@ import {
   type TeacherState,
   type WorkTemplate,
 } from "../api/client";
+import { EmptyState } from "../components/EmptyState";
 import { useTeacherId } from "../max/useTeacherId";
 
 export function Hub() {
@@ -103,9 +104,7 @@ export function Hub() {
 
       <h2>Готовы к проверке</h2>
       {inbox.length === 0 ? (
-        <div className="card muted">
-          <span className="muted-text">Пока пусто.</span>
-        </div>
+        <EmptyState title="Пока пусто" hint="Работы, готовые к проверке, появятся здесь." />
       ) : (
         inbox.map((s) => (
           <Link key={s.id} to={`/review/${s.id}`} className="card" style={{ display: "block" }}>
@@ -121,9 +120,7 @@ export function Hub() {
 
       <h2>Мои работы <span className="muted-text">· {works.length}</span></h2>
       {works.length === 0 && (
-        <div className="card muted">
-          <span className="muted-text">Пока ни одной. Создай первую.</span>
-        </div>
+        <EmptyState title="Пока ни одной работы" hint="Создай первую по кнопке ниже." />
       )}
       {works.slice(0, 3).map((w) => (
         <div key={w.id} className="card">
@@ -139,9 +136,7 @@ export function Hub() {
 
       <h2>Мои ученики <span className="muted-text">· {students.length}</span></h2>
       {students.length === 0 && (
-        <div className="card muted">
-          <span className="muted-text">Пока никого. Добавь учеников.</span>
-        </div>
+        <EmptyState title="Пока ни одного ученика" hint="Добавь по кнопке ниже." />
       )}
       {students.slice(0, 3).map((s) => (
         <div key={s.id} className="card">

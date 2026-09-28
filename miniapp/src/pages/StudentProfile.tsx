@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, type StudentProfile as Profile } from "../api/client";
+import { Loader } from "../components/Loader";
 import { useTeacherId } from "../max/useTeacherId";
 
 export function StudentProfile() {
@@ -17,7 +18,7 @@ export function StudentProfile() {
   }, [studentId, teacherId]);
 
   if (error) return <p style={{ padding: 16, color: "crimson" }}>{error}</p>;
-  if (!profile) return <p style={{ padding: 16 }}>Загрузка…</p>;
+  if (!profile) return <Loader text="Загрузка профиля…" />;
 
   return (
     <div style={{ padding: 16 }}>

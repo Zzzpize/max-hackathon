@@ -9,6 +9,7 @@ import {
   handleStudentPicked,
   handleWorkPicked,
 } from "./handlers/select.js";
+import { startInternalServer } from "./internal.js";
 import { bot } from "./max.js";
 
 bot.api
@@ -61,5 +62,7 @@ if (config.webhookDomain) {
   void bot.start();
   console.log("[bot] long polling mode");
 }
+
+startInternalServer();
 
 export { notifyChecked };

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type WorkTemplate } from "../api/client";
+import { EmptyState } from "../components/EmptyState";
+import { Loader } from "../components/Loader";
 import { useTeacherId } from "../max/useTeacherId";
 
 export function WorkPicker() {
@@ -28,36 +30,42 @@ export function WorkPicker() {
     }
   };
 
+  if (loading) return <Loader text="Загрузка работ…" />;
+
   return (
     <div className="page">
-      <h1>Выбрать работу</h1>
-      {loading && <p className="muted-text">Загрузка…</p>}
-      {!loading && works.length === 0 && (
-        <div className="card muted">
-          <p>Пока нет ни одной работы.</p>
-          <Link to="/works/new" className="btn primary">
-            Создать первую
-          </Link>
-        </div>
+      {works.length === 0 ? (
+        <EmptyState
+          title="Пока нет ни одной работы"
+          hint="Создай первую — задания и эталонные ответы."
+          action={
+            <Link to="/works/new" className="btn primary">
+              Создать
+            </Link>
+          }
+        />
+      ) : (
+        works.map((w) => (
+          <button
+            key={w.id}
+            className="card"
+            onClick={() => pick(w.id)}
+            disabled={selecting !== null}
+            style={{ width: "100%", textAlign: "left", border: "none" }}
+          >
+            <div className="row spread">
+              <b>{w.title}</b>
+              <span className="muted-text">{w.tasks.length} зад.</span>
+            </div>
+            <div className="muted-text">{w.grade} класс</div>
+          </button>
+        ))
       )}
-      {works.map((w) => (
-        <button
-          key={w.id}
-          className="card"
-          onClick={() => pick(w.id)}
-          disabled={selecting !== null}
-          style={{ width: "100%", textAlign: "left", border: "none" }}
-        >
-          <div className="row spread">
-            <b>{w.title}</b>
-            <span className="muted-text">{w.tasks.length} зад.</span>
-          </div>
-          <div className="muted-text">{w.grade} класс</div>
-        </button>
-      ))}
-      <Link to="/works/new" className="btn wide" style={{ marginTop: 12 }}>
-        + Новая работа
-      </Link>
+      {works.length > 0 && (
+        <Link to="/works/new" className="btn wide" style={{ marginTop: 12 }}>
+          + Новая работа
+        </Link>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   type TeacherState,
   type WorkTemplate,
 } from "../api/client";
+import { Loader } from "../components/Loader";
 import { useTeacherId } from "../max/useTeacherId";
 
 export function SubmissionFlow() {
@@ -64,7 +65,7 @@ export function SubmissionFlow() {
     }
   };
 
-  if (!state) return <p className="page">Загрузка…</p>;
+  if (!state) return <Loader />;
 
   return (
     <div className="page">

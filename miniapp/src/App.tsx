@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { AppBar } from "./components/AppBar";
 import { UserBadge } from "./components/UserBadge";
 import { maxBridge } from "./max/bridge";
 import { Dashboard } from "./pages/Dashboard";
@@ -31,6 +32,7 @@ export function App() {
   return (
     <>
       <UserBadge />
+      <AppBar />
       <StartParamRouter />
       <Routes>
         <Route path="/" element={<Hub />} />
