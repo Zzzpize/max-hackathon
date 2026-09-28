@@ -2,20 +2,18 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, type StudentProfile as Profile } from "../api/client";
 import { Loader } from "../components/Loader";
-import { useTeacherId } from "../max/useTeacherId";
 
 export function StudentProfile() {
   const { studentId = "" } = useParams();
-  const teacherId = useTeacherId();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api
-      .getStudentProfile(studentId, teacherId)
+      .getStudentProfile(studentId)
       .then(setProfile)
       .catch((e) => setError(String(e)));
-  }, [studentId, teacherId]);
+  }, [studentId]);
 
   if (error) return <p style={{ padding: 16, color: "crimson" }}>{error}</p>;
   if (!profile) return <Loader text="Загрузка профиля…" />;

@@ -14,19 +14,34 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./backend
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       STORAGE_DIR: ${STORAGE_DIR}
-      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY}
+      GIGACHAT_CLIENT_ID: ${GIGACHAT_CLIENT_ID:-}
+      GIGACHAT_CLIENT_SECRET: ${GIGACHAT_CLIENT_SECRET:-}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
       GIGACHAT_SCOPE: ${GIGACHAT_SCOPE}
       GIGACHAT_MODEL: ${GIGACHAT_MODEL}
       GIGACHAT_VERIFY_SSL_CERTS: ${GIGACHAT_VERIFY_SSL_CERTS}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
     volumes:
       - storage_data:/app/storage
     ports:

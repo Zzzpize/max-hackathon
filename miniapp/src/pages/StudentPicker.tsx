@@ -3,10 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, type Student } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { Loader } from "../components/Loader";
-import { useTeacherId } from "../max/useTeacherId";
 
 export function StudentPicker() {
-  const teacherId = useTeacherId();
   const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,16 +12,16 @@ export function StudentPicker() {
 
   useEffect(() => {
     api
-      .listStudents(teacherId)
+      .listStudents()
       .then(setStudents)
       .catch(() => setStudents([]))
       .finally(() => setLoading(false));
-  }, [teacherId]);
+  }, []);
 
   const pick = async (id: string) => {
     setSelecting(id);
     try {
-      await api.setState(teacherId, { current_student_id: id });
+      await api.setState({ current_student_id: id });
       navigate("/");
     } finally {
       setSelecting(null);

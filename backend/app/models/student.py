@@ -12,7 +12,9 @@ class Student(Base):
     __tablename__ = "students"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    teacher_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     class_id: Mapped[str] = mapped_column(String, index=True)
+    # Only a salted hash lives in PostgreSQL; names live in per-teacher files.
     display_name: Mapped[str] = mapped_column(String)
     grade: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

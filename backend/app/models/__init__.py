@@ -1,5 +1,6 @@
 from app.models.student import Student, StudentProfile
 from app.models.submission import CheckResult, Submission
+from app.models.teacher_state import TeacherState
 from app.models.work import WorkTemplate
 
 __all__ = [
@@ -8,4 +9,5 @@ __all__ = [
     "WorkTemplate",
     "Submission",
     "CheckResult",
+    "TeacherState",
 ]

@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { useTeacherId } from "../max/useTeacherId";
 
 export function StudentCreate() {
-  const teacherId = useTeacherId();
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [classId, setClassId] = useState("3-А");
@@ -19,7 +17,6 @@ export function StudentCreate() {
     setError(null);
     try {
       await api.createStudent({
-        teacher_id: teacherId,
         class_id: classId.trim(),
         display_name: name.trim(),
         grade,

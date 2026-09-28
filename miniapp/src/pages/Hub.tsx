@@ -8,10 +8,8 @@ import {
   type WorkTemplate,
 } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
-import { useTeacherId } from "../max/useTeacherId";
 
 export function Hub() {
-  const teacherId = useTeacherId();
   const [state, setState] = useState<TeacherState | null>(null);
   const [works, setWorks] = useState<WorkTemplate[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -20,10 +18,10 @@ export function Hub() {
 
   useEffect(() => {
     Promise.allSettled([
-      api.getState(teacherId),
-      api.listWorks(teacherId),
-      api.listStudents(teacherId),
-      api.listSubmissions(teacherId, "checked"),
+      api.getState(),
+      api.listWorks(),
+      api.listStudents(),
+      api.listSubmissions("checked"),
     ]).then(([s, w, st, sub]) => {
       if (s.status === "fulfilled") setState(s.value);
       if (w.status === "fulfilled") setWorks(w.value);
@@ -32,7 +30,7 @@ export function Hub() {
       const errs = [s, w, st, sub].filter((x) => x.status === "rejected");
       if (errs.length === 4) setError("Не удалось загрузить данные с сервера");
     });
-  }, [teacherId]);
+  }, []);
 
   const currentWork = works.find((w) => w.id === state?.current_work_id);
   const currentStudent = students.find(

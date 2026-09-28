@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { useTeacherId } from "../max/useTeacherId";
 
 type TaskInput = { index: number; statement: string; expected_answer: string };
 
 export function WorkCreate() {
-  const teacherId = useTeacherId();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [grade, setGrade] = useState<number>(3);
@@ -40,7 +38,6 @@ export function WorkCreate() {
     setError(null);
     try {
       await api.createWork({
-        teacher_id: teacherId,
         title: title.trim(),
         subject: "math",
         grade,

@@ -7,7 +7,7 @@ export async function notifyChecked(
   await bot.api.sendMessageToChat(chatId, "Работа готова к проверке.", {
     attachments: [
       kb.inlineKeyboard([
-        [openMiniappButton("Открыть", `submission:${submissionId}`)],
+        [openMiniappButton("Открыть", `submission_${submissionId}`)],
       ]),
     ],
   });

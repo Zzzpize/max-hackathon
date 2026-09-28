@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type ClassDashboard } from "../api/client";
 import { Loader } from "../components/Loader";
-import { useTeacherId } from "../max/useTeacherId";
 
 function ProgressBar({
   value,
@@ -42,16 +41,15 @@ function errorColor(rate: number): string {
 
 export function Dashboard() {
   const { classId = "" } = useParams();
-  const teacherId = useTeacherId();
   const [data, setData] = useState<ClassDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api
-      .getClassDashboard(classId, teacherId)
+      .getClassDashboard(classId)
       .then(setData)
       .catch((e) => setError(String(e)));
-  }, [classId, teacherId]);
+  }, [classId]);
 
   if (error) return <p className="page" style={{ color: "crimson" }}>{error}</p>;
   if (!data) return <Loader text="Загрузка дашборда…" />;

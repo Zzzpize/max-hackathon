@@ -1,19 +1,28 @@
+import { maxBridge } from "../max/bridge";
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+
+function authHeaders(): HeadersInit {
+  const initData = maxBridge.getInitData();
+  return initData ? { "X-Init-Data": initData } : {};
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init.headers ?? {}),
+    },
   });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
 
-function qs(params: Record<string, string | undefined>): string {
-  const filtered = Object.entries(params).filter(
-    ([, v]) => v !== undefined && v !== ""
-  ) as [string, string][];
-  return filtered.length ? `?${new URLSearchParams(filtered).toString()}` : "";
+export function photoUrl(relativePath: string): string {
+  const base = API_BASE.replace(/\/api$/, "");
+  return `${base}/storage/${relativePath}`;
 }
 
 export type WorkTemplate = {
@@ -31,6 +40,11 @@ export type WorkTemplate = {
   created_at: string;
 };
 
+export type WorkTemplateCreate = Omit<
+  WorkTemplate,
+  "id" | "teacher_id" | "created_at"
+>;
+
 export type Student = {
   id: string;
   teacher_id: string;
@@ -38,6 +52,12 @@ export type Student = {
   display_name: string;
   grade: number;
   created_at: string;
+};
+
+export type StudentCreate = {
+  class_id: string;
+  display_name: string;
+  grade: number;
 };
 
 export type Submission = {
@@ -56,8 +76,20 @@ export type TaskCheck = {
   is_correct: boolean;
   confidence: number;
   explanation: string;
+  error_type?:
+    | "вычислительная"
+    | "методологическая"
+    | "невнимательность"
+    | "не распознано"
+    | null;
   reasoning_graph: { step: string; ok: boolean }[];
-  photo_boxes: { photo_index: number; x: number; y: number; w: number; h: number }[];
+  photo_boxes: {
+    photo_index: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }[];
   teacher_verdict: { is_correct: boolean; comment: string } | null;
 };
 
@@ -92,88 +124,86 @@ export type TeacherState = {
 };
 
 export const api = {
-  listWorks: (teacherId: string) =>
-    request<WorkTemplate[]>(`/works${qs({ teacher_id: teacherId })}`),
+  listWorks: (limit = 50, offset = 0) =>
+    request<WorkTemplate[]>(`/works?limit=${limit}&offset=${offset}`),
 
-  createWork: (payload: Omit<WorkTemplate, "id" | "created_at">) =>
+  createWork: (payload: WorkTemplateCreate) =>
     request<WorkTemplate>(`/works`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  getWork: (workId: string, teacherId: string) =>
-    request<WorkTemplate>(`/works/${workId}${qs({ teacher_id: teacherId })}`),
+  generateWork: (topic: string, grade: number, n_tasks: number) =>
+    request<WorkTemplate>(`/works/generate`, {
+      method: "POST",
+      body: JSON.stringify({ topic, grade, n_tasks }),
+    }),
 
-  listStudents: (teacherId: string, classId?: string) =>
-    request<Student[]>(
-      `/students${qs({ teacher_id: teacherId, class_id: classId })}`
-    ),
+  getWork: (workId: string) => request<WorkTemplate>(`/works/${workId}`),
 
-  createStudent: (payload: Omit<Student, "id" | "created_at">) =>
+  listStudents: () => request<Student[]>(`/students`),
+
+  createStudent: (payload: StudentCreate) =>
     request<Student>(`/students`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  listSubmissions: (teacherId: string, status?: string) =>
+  deleteStudent: async (studentId: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/students/${studentId}`, {
+      method: "DELETE",
+      headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  },
+
+  listSubmissions: (status?: string) =>
     request<Submission[]>(
-      `/submissions${qs({ teacher_id: teacherId, status })}`
+      `/submissions${status ? `?status=${status}` : ""}`
     ),
 
-  getSubmission: (id: string, teacherId: string) =>
-    request<SubmissionResult>(
-      `/submissions/${id}${qs({ teacher_id: teacherId })}`
-    ),
+  getSubmission: (id: string) =>
+    request<SubmissionResult>(`/submissions/${id}`),
 
   reviewSubmission: (
     id: string,
-    teacherId: string,
     per_task: { task_index: number; is_correct: boolean; comment?: string }[]
   ) =>
-    request<{ status: string }>(
-      `/submissions/${id}/review${qs({ teacher_id: teacherId })}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ per_task }),
-      }
-    ),
+    request<{ status: string }>(`/submissions/${id}/review`, {
+      method: "PATCH",
+      body: JSON.stringify({ per_task }),
+    }),
 
-  getStudentProfile: (id: string, teacherId: string) =>
-    request<StudentProfile>(
-      `/students/${id}/profile${qs({ teacher_id: teacherId })}`
-    ),
+  getStudentProfile: (id: string) =>
+    request<StudentProfile>(`/students/${id}/profile`),
 
-  getClassDashboard: (classId: string, teacherId: string) =>
-    request<ClassDashboard>(
-      `/classes/${classId}/dashboard${qs({ teacher_id: teacherId })}`
-    ),
+  getClassDashboard: (classId: string) =>
+    request<ClassDashboard>(`/classes/${classId}/dashboard`),
 
-  getState: (teacherId: string) =>
-    request<TeacherState>(`/teachers/${teacherId}/state`),
+  getState: () => request<TeacherState>(`/teachers/me/state`),
 
-  setState: (
-    teacherId: string,
-    patch: { current_work_id?: string | null; current_student_id?: string | null }
-  ) =>
-    request<TeacherState>(`/teachers/${teacherId}/state`, {
+  setState: (patch: {
+    current_work_id?: string | null;
+    current_student_id?: string | null;
+  }) =>
+    request<TeacherState>(`/teachers/me/state`, {
       method: "PUT",
       body: JSON.stringify(patch),
     }),
 
   submitWork: async (params: {
-    teacherId: string;
     workId: string;
     studentId: string;
     photos: File[];
   }): Promise<Submission> => {
     const form = new FormData();
-    form.append("teacher_id", params.teacherId);
     form.append("work_id", params.workId);
     form.append("student_id", params.studentId);
     for (const photo of params.photos) form.append("photos", photo);
     const res = await fetch(`${API_BASE}/submissions`, {
       method: "POST",
       body: form,
+      headers: { ...authHeaders() },
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return res.json();

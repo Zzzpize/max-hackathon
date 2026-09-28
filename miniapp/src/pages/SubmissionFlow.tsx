@@ -7,10 +7,8 @@ import {
   type WorkTemplate,
 } from "../api/client";
 import { Loader } from "../components/Loader";
-import { useTeacherId } from "../max/useTeacherId";
 
 export function SubmissionFlow() {
-  const teacherId = useTeacherId();
   const navigate = useNavigate();
   const [state, setState] = useState<TeacherState | null>(null);
   const [work, setWork] = useState<WorkTemplate | null>(null);
@@ -19,15 +17,16 @@ export function SubmissionFlow() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const s = await api.getState(teacherId);
+        const s = await api.getState();
         setState(s);
         const [ws, ss] = await Promise.all([
-          api.listWorks(teacherId),
-          api.listStudents(teacherId),
+          api.listWorks(),
+          api.listStudents(),
         ]);
         setWork(ws.find((w) => w.id === s.current_work_id) ?? null);
         setStudent(ss.find((st) => st.id === s.current_student_id) ?? null);
@@ -35,7 +34,7 @@ export function SubmissionFlow() {
         setError(String(e));
       }
     })();
-  }, [teacherId]);
+  }, []);
 
   const addPhotos = (files: FileList | null) => {
     if (!files) return;
@@ -52,7 +51,6 @@ export function SubmissionFlow() {
     setError(null);
     try {
       const sub = await api.submitWork({
-        teacherId,
         workId: work.id,
         studentId: student.id,
         photos,
@@ -140,20 +138,41 @@ export function SubmissionFlow() {
         ref={fileRef}
         type="file"
         accept="image/*"
-        capture="environment"
         multiple
         onChange={(e) => addPhotos(e.target.files)}
         style={{ display: "none" }}
       />
-      <button
-        className="btn wide"
-        onClick={() => fileRef.current?.click()}
-        disabled={photos.length >= 4}
-      >
-        {photos.length === 0
-          ? "📷 Сделать фото или выбрать"
-          : `+ Ещё (${photos.length}/4)`}
-      </button>
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => addPhotos(e.target.files)}
+        style={{ display: "none" }}
+      />
+      <div className="row" style={{ gap: 8 }}>
+        <button
+          className="btn wide"
+          onClick={() => fileRef.current?.click()}
+          disabled={photos.length >= 4}
+          style={{ flex: 1 }}
+        >
+          🖼 Из галереи
+        </button>
+        <button
+          className="btn wide"
+          onClick={() => cameraRef.current?.click()}
+          disabled={photos.length >= 4}
+          style={{ flex: 1 }}
+        >
+          📷 Камера
+        </button>
+      </div>
+      {photos.length > 0 && (
+        <p className="muted-text" style={{ textAlign: "center", marginTop: 6 }}>
+          {photos.length}/4 фото
+        </p>
+      )}
 
       <div style={{ height: 12 }} />
       <button

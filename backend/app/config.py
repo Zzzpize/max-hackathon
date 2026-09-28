@@ -6,6 +6,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://checker:checker@postgres:5432/checker"
     storage_dir: str = "/app/storage"
+    redis_url: str = "redis://redis:6379/0"
+    dev_auto_create_tables: bool = False
 
     gigachat_client_id: str = ""
     gigachat_client_secret: str = ""
@@ -13,6 +15,10 @@ class Settings(BaseSettings):
     gigachat_scope: str = "GIGACHAT_API_CORP"
     gigachat_model: str = "GigaChat-2-Max"
     gigachat_verify_ssl_certs: bool = False
+
+    bot_notify_url: str = "http://bot:3001/internal/notify"
+
+    max_bot_token: str = ""
 
     @property
     def gigachat_credentials(self) -> str:

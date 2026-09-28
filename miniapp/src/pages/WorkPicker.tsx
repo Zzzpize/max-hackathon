@@ -3,10 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, type WorkTemplate } from "../api/client";
 import { EmptyState } from "../components/EmptyState";
 import { Loader } from "../components/Loader";
-import { useTeacherId } from "../max/useTeacherId";
 
 export function WorkPicker() {
-  const teacherId = useTeacherId();
   const navigate = useNavigate();
   const [works, setWorks] = useState<WorkTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,16 +12,16 @@ export function WorkPicker() {
 
   useEffect(() => {
     api
-      .listWorks(teacherId)
+      .listWorks()
       .then(setWorks)
       .catch(() => setWorks([]))
       .finally(() => setLoading(false));
-  }, [teacherId]);
+  }, []);
 
   const pick = async (id: string) => {
     setSelecting(id);
     try {
-      await api.setState(teacherId, { current_work_id: id });
+      await api.setState({ current_work_id: id });
       navigate("/");
     } finally {
       setSelecting(null);

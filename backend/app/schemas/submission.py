@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +29,7 @@ class TaskCheck(BaseModel):
     is_correct: bool = False
     confidence: float = 0.0
     explanation: str = ""
+    error_type: Literal["вычислительная", "методологическая", "невнимательность", "не распознано"] | None = None
     reasoning_graph: list[ReasoningStep] = Field(default_factory=list)
     photo_boxes: list[PhotoBox] = Field(default_factory=list)
     teacher_verdict: TeacherVerdict | None = None

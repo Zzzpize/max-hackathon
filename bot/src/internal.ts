@@ -34,7 +34,7 @@ async function handleNotify(body: NotifyBody): Promise<void> {
     {
       attachments: [
         kb.inlineKeyboard([
-          [openMiniappButton("Открыть результат", `submission:${body.submission_id}`)],
+          [openMiniappButton("Открыть результат", `submission_${body.submission_id}`)],
         ]),
       ],
     }

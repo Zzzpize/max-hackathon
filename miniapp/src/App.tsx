@@ -19,7 +19,8 @@ function StartParamRouter() {
   useEffect(() => {
     const param = maxBridge.getStartParam();
     if (!param) return;
-    const [kind, id] = param.split(":");
+    const [kind, ...rest] = param.split("_");
+    const id = rest.join("_");
     if (kind === "submission" && id) navigate(`/review/${id}`, { replace: true });
     else if (kind === "student" && id) navigate(`/student/${id}`, { replace: true });
     else if (kind === "class" && id) navigate(`/dashboard/${id}`, { replace: true });

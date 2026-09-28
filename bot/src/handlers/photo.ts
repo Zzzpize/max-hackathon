@@ -55,7 +55,7 @@ export async function handlePhoto(ctx: Context): Promise<boolean> {
       {
         attachments: [
           kb.inlineKeyboard([
-            [openMiniappButton("Открыть результат", `submission:${submission.id}`)],
+            [openMiniappButton("Открыть результат", `submission_${submission.id}`)],
           ]),
         ],
       }

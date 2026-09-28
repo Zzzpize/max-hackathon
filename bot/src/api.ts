@@ -5,7 +5,17 @@ import { config } from "./config.js";
 const http = axios.create({
   baseURL: config.backendUrl,
   timeout: 60_000,
+  headers: {
+    Authorization: `Bearer ${config.botToken}`,
+  },
 });
+
+function authHeaders(teacherId: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${config.botToken}`,
+    "X-Teacher-Id": String(teacherId),
+  };
+}
 
 export type SubmissionOut = {
   id: string;
@@ -46,23 +56,27 @@ export async function createSubmission(params: {
   teacherId: string;
   workId: string;
   studentId: string;
-  photos: { buffer: Buffer; filename: string }[];
+  photos: { buffer: Buffer; filename: string; contentType?: string }[];
 }): Promise<SubmissionOut> {
   const form = new FormData();
-  form.append("teacher_id", params.teacherId);
   form.append("work_id", params.workId);
   form.append("student_id", params.studentId);
   for (const p of params.photos) {
-    form.append("photos", p.buffer, { filename: p.filename });
+    form.append("photos", p.buffer, {
+      filename: p.filename,
+      contentType: p.contentType ?? "image/jpeg",
+    });
   }
   const { data } = await http.post<SubmissionOut>("/submissions", form, {
-    headers: form.getHeaders(),
+    headers: { ...authHeaders(params.teacherId), ...form.getHeaders() },
   });
   return data;
 }
 
 export async function getState(teacherId: string): Promise<TeacherState> {
-  const { data } = await http.get<TeacherState>(`/teachers/${teacherId}/state`);
+  const { data } = await http.get<TeacherState>(`/teachers/me/state`, {
+    headers: authHeaders(teacherId),
+  });
   return data;
 }
 
@@ -71,22 +85,23 @@ export async function setState(
   patch: { current_work_id?: string | null; current_student_id?: string | null }
 ): Promise<TeacherState> {
   const { data } = await http.put<TeacherState>(
-    `/teachers/${teacherId}/state`,
-    patch
+    `/teachers/me/state`,
+    patch,
+    { headers: authHeaders(teacherId) }
   );
   return data;
 }
 
 export async function listWorks(teacherId: string): Promise<WorkTemplate[]> {
   const { data } = await http.get<WorkTemplate[]>(`/works`, {
-    params: { teacher_id: teacherId },
+    headers: authHeaders(teacherId),
   });
   return data;
 }
 
 export async function listStudents(teacherId: string): Promise<Student[]> {
   const { data } = await http.get<Student[]>(`/students`, {
-    params: { teacher_id: teacherId },
+    headers: authHeaders(teacherId),
   });
   return data;
 }

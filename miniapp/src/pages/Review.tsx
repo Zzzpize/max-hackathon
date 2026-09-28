@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, type SubmissionResult, type TaskCheck } from "../api/client";
 import { Loader } from "../components/Loader";
 import { maxBridge } from "../max/bridge";
-import { useTeacherId } from "../max/useTeacherId";
 
 function confidenceColor(c: number): string {
   if (c >= 0.9) return "#10b981";
@@ -120,7 +119,6 @@ function TaskCard({
 
 export function Review() {
   const { submissionId = "" } = useParams();
-  const teacherId = useTeacherId();
   const navigate = useNavigate();
   const [data, setData] = useState<SubmissionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,10 +126,10 @@ export function Review() {
 
   useEffect(() => {
     api
-      .getSubmission(submissionId, teacherId)
+      .getSubmission(submissionId)
       .then(setData)
       .catch((e) => setError(String(e)));
-  }, [submissionId, teacherId]);
+  }, [submissionId]);
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -163,7 +161,6 @@ export function Review() {
     try {
       await api.reviewSubmission(
         submissionId,
-        teacherId,
         data.per_task.map((t) => ({
           task_index: t.task_index,
           is_correct: t.is_correct,
