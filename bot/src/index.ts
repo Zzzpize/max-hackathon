@@ -1,12 +1,31 @@
 import type { Context, NextFn } from "@maxhub/max-bot-api";
 import { config } from "./config.js";
-import { handlePhoto } from "./handlers/photo.js";
 import { handleStart } from "./handlers/start.js";
+import { handlePhoto } from "./handlers/photo.js";
 import { notifyChecked } from "./handlers/notify.js";
+import {
+  handleSelectStudent,
+  handleSelectWork,
+  handleStudentPicked,
+  handleWorkPicked,
+} from "./handlers/select.js";
 import { bot } from "./max.js";
+
+bot.api
+  .setMyCommands([
+    { name: "start", description: "О боте" },
+    { name: "work", description: "Выбрать работу для проверки" },
+    { name: "student", description: "Выбрать ученика" },
+  ])
+  .catch((err) => console.error("[bot] setMyCommands failed", err));
 
 bot.on("bot_started", handleStart);
 bot.command("start", handleStart);
+bot.command("work", handleSelectWork);
+bot.command("student", handleSelectStudent);
+
+bot.action(/^work:(.+)$/, handleWorkPicked);
+bot.action(/^student:(.+)$/, handleStudentPicked);
 
 bot.on("message_created", async (ctx: Context, next: NextFn) => {
   const handled = await handlePhoto(ctx);
@@ -18,7 +37,8 @@ bot.on("message_created", async (ctx: Context) => {
   if (!text) return;
   if (text.startsWith("/")) return;
   await ctx.reply(
-    "Пришли фото контрольной работы одного ученика. Одно или несколько снимков подряд."
+    "Пришли фото контрольной работы одного ученика. " +
+      "Не забудь выбрать работу (/work) и ученика (/student)."
   );
 });
 
@@ -42,8 +62,4 @@ if (config.webhookDomain) {
   console.log("[bot] long polling mode");
 }
 
-// Внутренний HTTP-канал backend → bot для пуша учителю после проверки.
-// MVP: примитивный http-сервер на том же порту не нужен при polling.
-// TODO(frontend/MAX): вынести notifyChecked в отдельный HTTP endpoint
-// когда бэкенд начнёт его вызывать. Пока экспортируем, чтобы не терять.
 export { notifyChecked };
