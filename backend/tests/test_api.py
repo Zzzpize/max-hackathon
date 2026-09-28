@@ -14,10 +14,10 @@ from app.routers import submissions as submission_router
 
 
 @pytest.mark.asyncio
-async def test_submission_lifecycle(sessions, monkeypatch, tmp_path):
+async def test_submission_lifecycle(sessions, monkeypatch, tmp_path, auth_headers):
     work = WorkTemplate(
         id="work-1",
-        teacher_id="teacher-1",
+        teacher_id="1",
         title="Сложение",
         grade=2,
         tasks=[
@@ -26,7 +26,7 @@ async def test_submission_lifecycle(sessions, monkeypatch, tmp_path):
     )
     async with sessions() as session:
         session.add_all([
-            Student(id="student-1", class_id="class-1", display_name="Ученик", grade=2),
+            Student(id="student-1", teacher_id="1", class_id="class-1", display_name="Ученик", grade=2),
             work,
         ])
         await session.commit()
@@ -67,7 +67,7 @@ async def test_submission_lifecycle(sessions, monkeypatch, tmp_path):
     photo = BytesIO()
     Image.new("RGB", (1, 1), "white").save(photo, format="PNG")
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://test", headers=auth_headers(1)) as client:
         created = await client.post(
             "/submissions",
             data={"work_id": work.id, "student_id": "student-1"},
@@ -112,11 +112,11 @@ async def test_submission_lifecycle(sessions, monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_review_rolls_back_when_profile_update_fails(sessions, monkeypatch):
+async def test_review_rolls_back_when_profile_update_fails(sessions, monkeypatch, auth_headers):
     async with sessions() as session:
         session.add_all([
-            Student(id="student-1", class_id="class-1", display_name="Ученик", grade=2),
-            WorkTemplate(id="work-1", teacher_id="teacher-1", title="Сложение", grade=2,
+            Student(id="student-1", teacher_id="1", class_id="class-1", display_name="Ученик", grade=2),
+            WorkTemplate(id="work-1", teacher_id="1", title="Сложение", grade=2,
                          tasks=[{"index": 1, "statement": "1 + 1", "expected_answer": "2"}]),
             Submission(id="submission-1", work_id="work-1", student_id="student-1", status="checked"),
         ])
@@ -134,7 +134,7 @@ async def test_review_rolls_back_when_profile_update_fails(sessions, monkeypatch
         await session.commit()
 
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://test", headers=auth_headers(1)) as client:
         response = await client.patch("/submissions/submission-1/review", json={
             "per_task": [{"task_index": 1, "is_correct": True}]
         })
@@ -150,7 +150,7 @@ async def test_review_rolls_back_when_profile_update_fails(sessions, monkeypatch
 async def test_internal_bot_notify_validates_submission(sessions):
     async with sessions() as session:
         session.add_all([
-            Student(id="student-1", class_id="class-1", display_name="Ученик", grade=2),
+            Student(id="student-1", teacher_id="42", class_id="class-1", display_name="Ученик", grade=2),
             WorkTemplate(id="work-1", teacher_id="42", title="Сложение", grade=2, tasks=[]),
             Submission(id="submission-1", work_id="work-1", student_id="student-1", status="checked"),
         ])

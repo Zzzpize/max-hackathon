@@ -21,7 +21,6 @@ class TaskDefinition(BaseModel):
 
 
 class WorkTemplateCreate(BaseModel):
-    teacher_id: str
     title: str
     subject: str = "math"
     grade: int
@@ -37,6 +36,7 @@ class WorkTemplateCreate(BaseModel):
 
 class WorkTemplateOut(WorkTemplateCreate):
     id: str
+    teacher_id: str
     created_at: datetime
 
     class Config:

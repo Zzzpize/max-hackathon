@@ -30,7 +30,7 @@ async def test_trend_regression(sessions, monkeypatch, scores, expected):
     )
     async with sessions() as session:
         session.add(Student(
-            id="student-1", class_id="class-1", display_name="Ученик", grade=2
+            id="student-1", teacher_id="teacher-1", class_id="class-1", display_name="Ученик", grade=2
         ))
         session.add(work)
         for index, score in enumerate(scores):

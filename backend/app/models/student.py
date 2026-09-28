@@ -12,6 +12,7 @@ class Student(Base):
     __tablename__ = "students"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    teacher_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     class_id: Mapped[str] = mapped_column(String, index=True)
     display_name: Mapped[str] = mapped_column(String)
     grade: Mapped[int] = mapped_column(Integer)

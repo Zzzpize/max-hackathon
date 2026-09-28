@@ -1,6 +1,22 @@
 from typing import Literal
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field
+
+
+class StudentCreate(BaseModel):
+    class_id: str = Field(min_length=1)
+    display_name: str = Field(min_length=1)
+    grade: int
+
+
+class StudentOut(StudentCreate):
+    id: str
+    teacher_id: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class WeakTopic(BaseModel):

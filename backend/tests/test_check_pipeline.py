@@ -25,7 +25,7 @@ async def test_pipeline_with_stub_llm(sessions, monkeypatch):
     )
     async with sessions() as session:
         session.add_all([
-            Student(id="student-1", class_id="class-1", display_name="Ученик", grade=2),
+            Student(id="student-1", teacher_id="teacher-1", class_id="class-1", display_name="Ученик", grade=2),
             work,
             submission,
         ])

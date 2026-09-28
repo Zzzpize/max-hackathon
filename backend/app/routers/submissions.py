@@ -16,6 +16,7 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import current_teacher
 from app.config import settings
 from app.db import get_session
 from app.models import CheckResult, Student, Submission, WorkTemplate
@@ -39,16 +40,23 @@ async def create_submission(
     background: BackgroundTasks,
     work_id: str = Form(...),
     student_id: str = Form(...),
+    teacher_id: str = Depends(current_teacher),
     photos: list[UploadFile] = File(...),
     session: AsyncSession = Depends(get_session),
 ) -> Submission:
     if not 1 <= len(photos) <= 4:
         raise HTTPException(status_code=422, detail="provide 1 to 4 photos")
 
-    if await session.get(WorkTemplate, work_id) is None:
+    work = await session.get(WorkTemplate, work_id)
+    if work is None:
         raise HTTPException(status_code=404, detail="work not found")
-    if await session.get(Student, student_id) is None:
+    student = await session.get(Student, student_id)
+    if student is None:
         raise HTTPException(status_code=404, detail="student not found")
+    if student.teacher_id != work.teacher_id:
+        raise HTTPException(status_code=403, detail="student and work belong to different teachers")
+    if teacher_id != work.teacher_id:
+        raise HTTPException(status_code=403, detail="work belongs to another teacher")
 
     # Проверяем все файлы до записи: не оставляем часть работы,
     # если последнее фото оказалось невалидным.
@@ -111,7 +119,7 @@ async def create_submission(
 
 @router.get("", response_model=list[SubmissionOut])
 async def list_submissions(
-    teacher_id: str,
+    teacher_id: str = Depends(current_teacher),
     status: SubmissionStatus | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> list[Submission]:
@@ -132,11 +140,15 @@ async def list_submissions(
 @router.get("/{submission_id}", response_model=SubmissionResultOut)
 async def get_submission(
     submission_id: str,
+    teacher_id: str = Depends(current_teacher),
     session: AsyncSession = Depends(get_session),
 ) -> SubmissionResultOut:
     submission = await session.get(Submission, submission_id)
     if submission is None:
         raise HTTPException(status_code=404, detail="submission not found")
+    work = await session.get(WorkTemplate, submission.work_id)
+    if work is None or work.teacher_id != teacher_id:
+        raise HTTPException(status_code=403, detail="submission belongs to another teacher")
 
     check = (
         None if submission.status == SubmissionStatus.pending
@@ -159,11 +171,15 @@ async def get_submission(
 async def review_submission(
     submission_id: str,
     review: TeacherReview,
+    teacher_id: str = Depends(current_teacher),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     submission = await session.get(Submission, submission_id)
     if submission is None:
         raise HTTPException(status_code=404, detail="submission not found")
+    work = await session.get(WorkTemplate, submission.work_id)
+    if work is None or work.teacher_id != teacher_id:
+        raise HTTPException(status_code=403, detail="submission belongs to another teacher")
     if submission.status not in (SubmissionStatus.checked, SubmissionStatus.confirmed):
         raise HTTPException(status_code=409, detail="submission is not checked")
     already_confirmed = submission.status == SubmissionStatus.confirmed

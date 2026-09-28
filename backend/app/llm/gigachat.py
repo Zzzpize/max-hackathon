@@ -217,4 +217,25 @@ class GigaChatClient:
         return []
 
 
+    async def generate_tasks(self, prompt: str) -> str:
+        async with await self._client() as client:
+            response = await client.achat({
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Ты составляешь задачи по математике для учеников начальной школы. "
+                            "Верни только JSON-объект вида "
+                            '{"tasks":[{"statement":"...",'
+                            '"expected_answer":"..."}]}. '
+                            "В expected_answer указывай один короткий ответ "
+                            "без решения и пояснений."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            })
+        return response.choices[0].message.content
+
+
 gigachat_client = GigaChatClient()

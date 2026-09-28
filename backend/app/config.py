@@ -16,6 +16,8 @@ class Settings(BaseSettings):
 
     bot_notify_url: str = "http://bot:3000/internal/notify"
 
+    max_bot_token: str = ""
+
     @property
     def gigachat_credentials(self) -> str:
         if self.gigachat_auth_key:
