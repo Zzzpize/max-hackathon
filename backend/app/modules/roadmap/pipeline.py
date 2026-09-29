@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from app.llm.gigachat import gigachat_client
 from app.models.roadmap import Roadmap
-from app.modules.roadmap.prompts import GENERATE_SYSTEM, SUBJECT_CONTEXT
+from app.modules.roadmap.prompts import GENERATE_SYSTEM, REGENERATE_SEGMENT_SYSTEM, SUBJECT_CONTEXT
 
 logger = logging.getLogger(__name__)
 WEEKS = re.compile(r"([1-9]\d?)(?:-([1-9]\d?))?\Z")
@@ -126,6 +126,50 @@ async def generate_roadmap(
             raise HTTPException(status_code=502, detail="Не удалось связаться с моделью")
         except (ValueError, TypeError) as exc:
             logger.warning("Невалидный план от GigaChat: %s", exc)
+            payload["previous_error"] = str(exc)
+
+    raise HTTPException(
+        status_code=502,
+        detail="модель вернула невалидный план, попробуйте другую формулировку",
+    )
+
+
+async def regenerate_segment(roadmap: Roadmap, index: int, refine_prompt: str) -> dict:
+    segments = roadmap.content["segments"]
+    if not 1 <= index <= len(segments):
+        raise HTTPException(status_code=404, detail="Сегмент не найден")
+
+    current = segments[index - 1]
+    payload = {
+        "subject": roadmap.subject,
+        "grade": roadmap.grade,
+        "teacher_prompt": roadmap.prompt,
+        "current_segment": current,
+        "neighbor_segments": segments[max(0, index - 2):index - 1]
+        + segments[index:index + 1],
+        "refine_prompt": refine_prompt,
+    }
+    for attempt in range(2):
+        try:
+            raw = await gigachat_client.chat_completion(
+                REGENERATE_SEGMENT_SYSTEM, json.dumps(payload, ensure_ascii=False)
+            )
+            replacement = json.loads(raw)
+            if not isinstance(replacement, dict) or any(
+                replacement.get(key) != current[key] for key in ("index", "weeks")
+            ):
+                raise ValueError("index и weeks должны остаться прежними")
+            return validate_content({
+                "segments": [*segments[:index - 1], replacement, *segments[index:]]
+            })
+        except (httpx.TransportError, TimeoutError, ConnectionError):
+            logger.warning("Ошибка соединения с GigaChat", exc_info=True)
+            if attempt == 0:
+                await asyncio.sleep(1)
+                continue
+            raise HTTPException(status_code=502, detail="Не удалось связаться с моделью")
+        except (ValueError, TypeError) as exc:
+            logger.warning("Невалидный сегмент от GigaChat: %s", exc)
             payload["previous_error"] = str(exc)
 
     raise HTTPException(
