@@ -308,13 +308,13 @@ class GigaChatClient:
         return empty
 
 
-    async def generate_tasks(self, prompt: str) -> str:
+    async def generate_tasks(self, prompt: str, system_prompt: str | None = None) -> str:
         async with await self._client() as client:
             response = await client.achat({
                 "messages": [
                     {
                         "role": "system",
-                        "content": (
+                        "content": system_prompt or (
                             "Ты составляешь задачи по математике для учеников начальной школы. "
                             "Верни только JSON-объект вида "
                             '{"tasks":[{"statement":"...",'

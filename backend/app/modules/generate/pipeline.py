@@ -4,6 +4,7 @@ import re
 
 from app.llm.gigachat import gigachat_client
 from app.models import WorkTemplate
+from app.modules.generate.core import generate_tasks
 from app.schemas.work import TaskDefinition
 
 logger = logging.getLogger(__name__)
@@ -93,23 +94,14 @@ async def generate_work(topic: str, grade: int, n_tasks: int) -> WorkTemplate:
     if not topic or grade not in LIMITS or not 1 <= n_tasks <= 20:
         raise ValueError("Некорректные параметры генерации")
 
-    prompt = json.dumps({
-        "topic": topic,
-        "grade": grade,
-        "n_tasks": n_tasks,
-        "max_number": LIMITS[grade],
-        "instruction": (
-            "Сгенерируй указанное число задач по теме для этого класса. "
-            "Числа в условиях не должны превышать max_number. "
-            "Для каждой задачи верни условие и один короткий эталонный ответ."
-        ),
-    }, ensure_ascii=False)
-
     if gigachat_client._credentials:
         for attempt in range(2):
             try:
-                raw = await gigachat_client.generate_tasks(prompt)
-                tasks = _validate_tasks(raw, grade, n_tasks)
+                generated = await generate_tasks(
+                    "math", grade, topic, n_tasks,
+                    f"Числа не больше {LIMITS[grade]}. Один короткий числовой ответ без объяснения.",
+                )
+                tasks = _validate_tasks(json.dumps({"tasks": generated}), grade, n_tasks)
                 return WorkTemplate(
                     title=f"Контрольная: {topic}",
                     subject="math",
