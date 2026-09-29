@@ -51,6 +51,13 @@ async def test_generate_and_list(sessions, auth_headers, monkeypatch):
         assert updated.status_code == 200, updated.text
         assert updated.json()["content"]["segments"][0]["materials_hint"] == ""
 
+        overlapping = await client.patch(f"/roadmaps/{roadmap_id}", json={
+            "content": {"segments": [segment, {**segment, "index": 2, "weeks": "2-3"}]}
+        })
+        assert overlapping.status_code == 422
+        assert "пересекаются" in overlapping.json()["detail"]
+        assert len((await client.get(f"/roadmaps/{roadmap_id}")).json()["content"]["segments"]) == 1
+
     async with httpx.AsyncClient(transport=transport, base_url="http://test", headers=auth_headers(2)) as client:
         assert (await client.get("/roadmaps")).json() == []
 
