@@ -1,7 +1,9 @@
 from datetime import datetime
+import re
 from typing import Literal
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +12,8 @@ from app.auth import current_teacher
 from app.db import get_session
 from app.models import Homework
 from app.modules.generate.core import validate_tasks
+from app.modules.generate import core
+from app.modules.homework.export import render_pdf, render_txt
 from app.modules.homework.pipeline import generate_homework
 
 router = APIRouter(prefix="/homework", tags=["homework"])
@@ -40,6 +44,10 @@ class HomeworkPatch(BaseModel):
         if value is None:
             return None
         return validate_tasks(value, len(value))
+
+
+class HomeworkRegenerate(BaseModel):
+    extra_prompt: str = ""
 
 
 class HomeworkOut(BaseModel):
@@ -136,3 +144,41 @@ async def delete_homework(
     homework = await owned_homework(homework_id, teacher_id, session)
     await session.delete(homework)
     await session.commit()
+
+
+@router.post("/{homework_id}/regenerate", response_model=HomeworkOut)
+async def regenerate_homework(
+    homework_id: str,
+    payload: HomeworkRegenerate,
+    teacher_id: str = Depends(current_teacher),
+    session: AsyncSession = Depends(get_session),
+) -> Homework:
+    homework = await owned_homework(homework_id, teacher_id, session)
+    context = "\n".join(part for part in (homework.prompt, payload.extra_prompt.strip()) if part)
+    homework.tasks = await core.generate_tasks(
+        homework.subject, homework.grade, homework.topic, len(homework.tasks), context
+    )
+    homework.updated_at = datetime.utcnow()
+    await session.commit()
+    await session.refresh(homework)
+    return homework
+
+
+@router.get("/{homework_id}/export")
+async def export_homework(
+    homework_id: str,
+    format: Literal["txt", "pdf"] = Query(...),
+    teacher_id: str = Depends(current_teacher),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    homework = await owned_homework(homework_id, teacher_id, session)
+    filename = f"homework-{homework.title}-{homework.created_at:%Y-%m-%d}.{format}"
+    safe_title = re.sub(r"[^A-Za-z0-9_-]+", "-", homework.title).strip("-") or "homework"
+    fallback = f"homework-{safe_title}-{homework.created_at:%Y-%m-%d}.{format}"
+    return Response(
+        content=render_txt(homework) if format == "txt" else render_pdf(homework),
+        media_type="text/plain; charset=utf-8" if format == "txt" else "application/pdf",
+        headers={"Content-Disposition": (
+            f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+        )},
+    )
