@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 const TABS = [
   { to: "/roadmaps", icon: "📋", label: "Планы" },
@@ -6,7 +6,12 @@ const TABS = [
   { to: "/", icon: "✅", label: "Проверка", end: true },
 ] as const;
 
+const HIDDEN_ON = [/^\/review\//, /^\/submit/];
+
 export function BottomNav() {
+  const { pathname } = useLocation();
+  if (HIDDEN_ON.some((re) => re.test(pathname))) return null;
+
   return (
     <nav
       style={{

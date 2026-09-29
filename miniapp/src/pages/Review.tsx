@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type SubmissionResult, type TaskCheck } from "../api/client";
+import {
+  api,
+  photoUrl,
+  type SubmissionResult,
+  type TaskCheck,
+} from "../api/client";
 import { Loader } from "../components/Loader";
 import { maxBridge } from "../max/bridge";
 
@@ -32,26 +37,170 @@ function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
+function PhotoViewer({
+  photos,
+  tasks,
+  highlightedTaskIndex,
+  onClose,
+}: {
+  photos: string[];
+  tasks: TaskCheck[];
+  highlightedTaskIndex: number | null;
+  onClose: () => void;
+}) {
+  const [activePhoto, setActivePhoto] = useState(() => {
+    if (highlightedTaskIndex === null) return 0;
+    const task = tasks.find((t) => t.task_index === highlightedTaskIndex);
+    return task?.photo_boxes[0]?.photo_index ?? 0;
+  });
+
+  const boxesForPhoto = tasks
+    .flatMap((t) =>
+      t.photo_boxes.map((b) => ({ ...b, task_index: t.task_index, is_correct: t.is_correct }))
+    )
+    .filter((b) => b.photo_index === activePhoto);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.92)",
+        zIndex: 100,
+        display: "flex",
+        flexDirection: "column",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          padding: 12,
+          color: "#fff",
+        }}
+      >
+        <span>
+          Фото {activePhoto + 1} / {photos.length}
+        </span>
+        <button
+          className="btn"
+          onClick={onClose}
+          style={{ background: "rgba(255,255,255,0.15)", color: "#fff" }}
+        >
+          ✕
+        </button>
+      </div>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 12,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ position: "relative", maxWidth: "100%", maxHeight: "100%" }}>
+          <img
+            src={photoUrl(photos[activePhoto])}
+            alt=""
+            style={{ maxWidth: "100%", maxHeight: "70vh", display: "block" }}
+          />
+          {boxesForPhoto.map((b, i) => {
+            const highlighted =
+              highlightedTaskIndex === null ||
+              b.task_index === highlightedTaskIndex;
+            const color = b.is_correct ? "#10b981" : "#ef4444";
+            return (
+              <div
+                key={i}
+                style={{
+                  position: "absolute",
+                  left: `${b.x * 100}%`,
+                  top: `${b.y * 100}%`,
+                  width: `${b.w * 100}%`,
+                  height: `${b.h * 100}%`,
+                  border: `2px solid ${color}`,
+                  background: highlighted ? `${color}30` : "transparent",
+                  opacity: highlighted ? 1 : 0.35,
+                  borderRadius: 4,
+                  transition: "opacity 0.15s",
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -18,
+                    left: 0,
+                    background: color,
+                    color: "#fff",
+                    fontSize: 11,
+                    padding: "1px 5px",
+                    borderRadius: 3,
+                  }}
+                >
+                  #{b.task_index}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {photos.length > 1 && (
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            padding: 12,
+            overflowX: "auto",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {photos.map((p, i) => (
+            <img
+              key={i}
+              src={photoUrl(p)}
+              alt=""
+              onClick={() => setActivePhoto(i)}
+              style={{
+                width: 56,
+                height: 56,
+                objectFit: "cover",
+                borderRadius: 6,
+                border:
+                  i === activePhoto ? "2px solid #fff" : "2px solid transparent",
+                opacity: i === activePhoto ? 1 : 0.7,
+                cursor: "pointer",
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   onToggle,
   onEditAnswer,
+  onShowOnPhoto,
 }: {
   task: TaskCheck;
   onToggle: () => void;
   onEditAnswer: (v: string) => void;
+  onShowOnPhoto: () => void;
 }) {
   const lowConfidence = task.confidence < 0.7;
+  const hasBoxes = task.photo_boxes.length > 0;
   return (
     <div className={`card${lowConfidence ? " warn" : ""}`}>
       <div className="row spread" style={{ marginBottom: 8 }}>
         <div>
           <b>Задание {task.task_index}</b>
           {lowConfidence && (
-            <span
-              className="badge warn"
-              style={{ marginLeft: 8 }}
-            >
+            <span className="badge warn" style={{ marginLeft: 8 }}>
               проверь вручную
             </span>
           )}
@@ -90,6 +239,16 @@ function TaskCard({
       </div>
       <ConfidenceBar value={task.confidence} />
 
+      {hasBoxes && (
+        <button
+          className="btn subtle"
+          onClick={onShowOnPhoto}
+          style={{ marginTop: 8, padding: "6px 10px", fontSize: 12 }}
+        >
+          🔍 Показать на фото
+        </button>
+      )}
+
       {task.explanation && (
         <p className="muted-text" style={{ marginTop: 8 }}>
           {task.explanation}
@@ -103,10 +262,7 @@ function TaskCard({
           </summary>
           <ol style={{ marginTop: 6, paddingLeft: 18 }}>
             {task.reasoning_graph.map((s, i) => (
-              <li
-                key={i}
-                style={{ color: s.ok ? "#065f46" : "#991b1b" }}
-              >
+              <li key={i} style={{ color: s.ok ? "#065f46" : "#991b1b" }}>
                 {s.step}
               </li>
             ))}
@@ -123,6 +279,8 @@ export function Review() {
   const [data, setData] = useState<SubmissionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [highlightedTask, setHighlightedTask] = useState<number | null>(null);
 
   useEffect(() => {
     api
@@ -176,10 +334,45 @@ export function Review() {
     }
   };
 
+  const openViewer = (taskIndex: number | null) => {
+    setHighlightedTask(taskIndex);
+    setViewerOpen(true);
+  };
+
   return (
     <>
       <div className="page">
         <h1>Проверка работы</h1>
+
+        {data.photos.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              overflowX: "auto",
+              margin: "0 -16px 12px",
+              padding: "0 16px",
+            }}
+          >
+            {data.photos.map((p, i) => (
+              <img
+                key={i}
+                src={photoUrl(p)}
+                alt={`Фото ${i + 1}`}
+                onClick={() => openViewer(null)}
+                style={{
+                  width: 96,
+                  height: 96,
+                  objectFit: "cover",
+                  borderRadius: 8,
+                  flexShrink: 0,
+                  cursor: "pointer",
+                  border: "1px solid rgba(0,0,0,0.08)",
+                }}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="card">
           <div className="row spread">
@@ -225,6 +418,7 @@ export function Review() {
             task={t}
             onToggle={() => patchTask(t.task_index, { is_correct: !t.is_correct })}
             onEditAnswer={(v) => patchTask(t.task_index, { student_answer: v })}
+            onShowOnPhoto={() => openViewer(t.task_index)}
           />
         ))}
       </div>
@@ -249,6 +443,15 @@ export function Review() {
           {saving ? "Сохраняю…" : "Подтвердить"}
         </button>
       </div>
+
+      {viewerOpen && (
+        <PhotoViewer
+          photos={data.photos}
+          tasks={data.per_task}
+          highlightedTaskIndex={highlightedTask}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
     </>
   );
 }
