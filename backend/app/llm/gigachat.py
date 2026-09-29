@@ -328,5 +328,21 @@ class GigaChatClient:
             })
         return response.choices[0].message.content
 
+    async def chat_completion(self, system_prompt: str, user_payload: str) -> str:
+        async with await self._client() as client:
+            response = await client.achat({
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_payload},
+                ],
+            })
+        try:
+            content = response.choices[0].message.content
+        except (AttributeError, IndexError, TypeError) as exc:
+            raise ValueError("GigaChat вернул ответ без текста") from exc
+        if not isinstance(content, str):
+            raise ValueError("GigaChat вернул ответ без текста")
+        return content
+
 
 gigachat_client = GigaChatClient()
