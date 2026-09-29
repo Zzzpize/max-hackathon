@@ -90,6 +90,8 @@ class GigaChatClient:
                                 "attachments": attachments,
                             },
                         ],
+                        "temperature": 0.1,
+                        "top_p": 0.1,
                     })
 
                 data = json.loads(response.choices[0].message.content)
@@ -97,6 +99,7 @@ class GigaChatClient:
                     {
                         "task_index": int(item["task_index"]),
                         "answer": str(item["answer"]),
+                        "raw_context": str(item.get("raw_context", "")),
                         "confidence": float(item["confidence"]),
                         "photo_boxes": item.get("photo_boxes", []),
                     }
@@ -122,28 +125,32 @@ class GigaChatClient:
         key = hashlib.sha256(json.dumps(
             [statement, expected_answer, student_answer], ensure_ascii=False
         ).encode()).hexdigest()
-        try:
-            async with self._redis.lock("check:cache:lock", timeout=120):
-                cached = await self._redis.hget("check:cache", key)
-                if cached is not None:
-                    await self._redis.zadd("check:cache:lru", {key: time.time_ns()})
-                    return json.loads(cached)
 
-                result = await self._check_task_uncached(
-                    system_prompt, statement, expected_answer, student_answer
-                )
-                await self._redis.hset("check:cache", key, json.dumps(result, ensure_ascii=False))
+        # Кэш чтения — без глобального лока, чтобы параллельные проверки
+        # одной работы не сериализовались на LLM-вызове.
+        try:
+            cached = await self._redis.hget("check:cache", key)
+            if cached is not None:
                 await self._redis.zadd("check:cache:lru", {key: time.time_ns()})
-                old = await self._redis.zrange("check:cache:lru", 0, -501)
-                if old:
-                    await self._redis.hdel("check:cache", *old)
-                    await self._redis.zrem("check:cache:lru", *old)
-                return result
+                return json.loads(cached)
         except RedisError:
-            logger.warning("Redis cache unavailable; checking task without cache")
-            return await self._check_task_uncached(
-                system_prompt, statement, expected_answer, student_answer
-            )
+            logger.warning("Redis cache read failed; falling back to LLM")
+
+        result = await self._check_task_uncached(
+            system_prompt, statement, expected_answer, student_answer
+        )
+
+        try:
+            await self._redis.hset("check:cache", key, json.dumps(result, ensure_ascii=False))
+            await self._redis.zadd("check:cache:lru", {key: time.time_ns()})
+            old = await self._redis.zrange("check:cache:lru", 0, -501)
+            if old:
+                await self._redis.hdel("check:cache", *old)
+                await self._redis.zrem("check:cache:lru", *old)
+        except RedisError:
+            logger.warning("Redis cache write failed; result not cached")
+
+        return result
 
     
     async def _check_task_uncached(
@@ -180,6 +187,8 @@ class GigaChatClient:
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": payload},
                         ],
+                        "temperature": 0.1,
+                        "top_p": 0.1,
                     })
 
                 data = json.loads(response.choices[0].message.content)

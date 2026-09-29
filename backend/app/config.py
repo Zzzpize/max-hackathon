@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     gigachat_client_secret: str = ""
     gigachat_auth_key: str = ""
     gigachat_scope: str = "GIGACHAT_API_CORP"
-    gigachat_model: str = "GigaChat-2-Max"
+    gigachat_model: str = "GigaChat-3-Ultra"
     gigachat_verify_ssl_certs: bool = False
 
     bot_notify_url: str = "http://bot:3001/internal/notify"
