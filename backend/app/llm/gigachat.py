@@ -54,10 +54,21 @@ class GigaChatClient:
         self,
         photos: list[Path],
         system_prompt: str,
+        tasks: list[dict] | None = None,
     ) -> list[dict]:
         if not self._credentials:
             logger.warning("GigaChat credentials not set")
             return []
+
+        task_lines = ""
+        if tasks:
+            task_lines = "\n\nОжидаемые задания (сверяй по СМЫСЛУ условия, не по номеру на листе):\n" + "\n".join(
+                f"{t['index']}. {t['statement']}" for t in tasks
+            )
+        user_content = (
+            "Распознай финальные ответы ученика на приложенных фото."
+            + task_lines
+        )
 
         for attempt in range(2):
             try:
@@ -68,14 +79,14 @@ class GigaChatClient:
                             uploaded = await client.aupload_file(
                                 (photo.name, file), purpose="general"
                             )
-                        attachments.append(uploaded.id)
+                        attachments.append(uploaded.id_)
 
                     response = await client.achat({
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {
                                 "role": "user",
-                                "content": "Распознай ответы на приложенных фото.",
+                                "content": user_content,
                                 "attachments": attachments,
                             },
                         ],
@@ -232,6 +243,69 @@ class GigaChatClient:
                 logger.warning("Memory request failed, attempt %s", attempt + 1)
 
         return []
+
+
+    async def extract_reference(
+        self,
+        photos: list[Path],
+        system_prompt: str,
+    ) -> dict:
+        """Извлечь задания и эталонные ответы с фото/страниц PDF.
+
+        Возвращает dict вида
+        {title, subject, grade, tasks: [{index, statement, expected_answer, confidence}]}.
+        При ошибке — пустая заготовка.
+        """
+        empty = {"title": "", "subject": None, "grade": None, "tasks": []}
+        if not self._credentials:
+            logger.warning("GigaChat credentials not set")
+            return empty
+
+        for attempt in range(2):
+            try:
+                async with await self._client() as client:
+                    attachments = []
+                    for photo in photos:
+                        with photo.open("rb") as file:
+                            uploaded = await client.aupload_file(
+                                (photo.name, file), purpose="general"
+                            )
+                        attachments.append(uploaded.id_)
+
+                    response = await client.achat({
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {
+                                "role": "user",
+                                "content": "Извлеки задания и эталонные ответы.",
+                                "attachments": attachments,
+                            },
+                        ],
+                    })
+
+                data = json.loads(response.choices[0].message.content)
+                tasks = []
+                for item in data.get("tasks", []):
+                    tasks.append({
+                        "index": str(item.get("index", "")),
+                        "statement": str(item.get("statement", "")).strip(),
+                        "expected_answer": str(item.get("expected_answer", "")).strip(),
+                        "confidence": float(item.get("confidence", 0.0)),
+                    })
+                return {
+                    "title": str(data.get("title") or "").strip(),
+                    "subject": data.get("subject"),
+                    "grade": data.get("grade"),
+                    "tasks": tasks,
+                }
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError, IndexError):
+                logger.warning("Invalid GigaChat extract response, attempt %s", attempt + 1)
+            except httpx.TransportError:
+                logger.warning("GigaChat extract request failed, attempt %s", attempt + 1)
+                if attempt == 0:
+                    await asyncio.sleep(1)
+
+        return empty
 
 
     async def generate_tasks(self, prompt: str) -> str:

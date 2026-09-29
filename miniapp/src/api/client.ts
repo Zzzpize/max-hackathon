@@ -123,6 +123,18 @@ export type TeacherState = {
   updated_at: string | null;
 };
 
+export type ExtractedReference = {
+  title: string;
+  subject: string | null;
+  grade: number | null;
+  tasks: {
+    index: string;
+    statement: string;
+    expected_answer: string;
+    confidence: number;
+  }[];
+};
+
 export const api = {
   listWorks: (limit = 50, offset = 0) =>
     request<WorkTemplate[]>(`/works?limit=${limit}&offset=${offset}`),
@@ -191,6 +203,18 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
+  extractReference: async (file: File): Promise<ExtractedReference> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/works/extract-reference`, {
+      method: "POST",
+      body: form,
+      headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json();
+  },
+
   submitWork: async (params: {
     workId: string;
     studentId: string;
@@ -207,5 +231,43 @@ export const api = {
     });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return res.json();
+  },
+
+  submitBatch: async (params: {
+    workId: string;
+    students: { studentId: string; photos: File[] }[];
+    concurrency?: number;
+    onProgress?: (done: number, total: number) => void;
+  }): Promise<{ studentId: string; result: Submission | Error }[]> => {
+    const { workId, students, concurrency = 5, onProgress } = params;
+    const total = students.length;
+    let done = 0;
+    const results: { studentId: string; result: Submission | Error }[] = [];
+
+    const queue = [...students];
+    const workers = Array.from({ length: Math.min(concurrency, total) }, async () => {
+      while (queue.length > 0) {
+        const item = queue.shift();
+        if (!item) break;
+        try {
+          const sub = await api.submitWork({
+            workId,
+            studentId: item.studentId,
+            photos: item.photos,
+          });
+          results.push({ studentId: item.studentId, result: sub });
+        } catch (e) {
+          results.push({
+            studentId: item.studentId,
+            result: e instanceof Error ? e : new Error(String(e)),
+          });
+        }
+        done++;
+        onProgress?.(done, total);
+      }
+    });
+
+    await Promise.all(workers);
+    return results;
   },
 };

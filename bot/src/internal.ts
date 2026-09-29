@@ -28,17 +28,21 @@ async function handleNotify(body: NotifyBody): Promise<void> {
   if (!Number.isFinite(teacherId)) throw new Error("bad teacher_id");
   if (!body.submission_id) throw new Error("submission_id required");
 
-  await bot.api.sendMessageToUser(
-    teacherId,
-    "Работа готова к проверке.",
-    {
-      attachments: [
-        kb.inlineKeyboard([
-          [openMiniappButton("Открыть результат", `submission_${body.submission_id}`)],
-        ]),
-      ],
-    }
-  );
+  const text = "Работа готова к проверке.";
+  const extra = {
+    attachments: [
+      kb.inlineKeyboard([
+        [openMiniappButton("Открыть результат", `submission_${body.submission_id}`)],
+      ]),
+    ],
+  };
+
+  try {
+    await bot.api.sendMessageToChat(teacherId, text, extra);
+  } catch (err) {
+    console.warn("[internal] sendMessageToChat failed, trying sendMessageToUser", err);
+    await bot.api.sendMessageToUser(teacherId, text, extra);
+  }
 }
 
 export function startInternalServer(): void {

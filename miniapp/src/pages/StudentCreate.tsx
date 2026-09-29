@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { ALL_GRADES } from "../subjects";
 
 export function StudentCreate() {
   const navigate = useNavigate();
@@ -31,7 +32,6 @@ export function StudentCreate() {
 
   return (
     <div className="page">
-      <h1>Новый ученик</h1>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <div className="card">
@@ -57,9 +57,11 @@ export function StudentCreate() {
           value={grade}
           onChange={(e) => setGrade(Number(e.target.value))}
         >
-          <option value={2}>2 класс</option>
-          <option value={3}>3 класс</option>
-          <option value={4}>4 класс</option>
+          {ALL_GRADES.map((g) => (
+            <option key={g} value={g}>
+              {g} класс
+            </option>
+          ))}
         </select>
       </div>
 

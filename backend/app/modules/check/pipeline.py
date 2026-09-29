@@ -32,6 +32,10 @@ async def run_check(submission_id: str) -> None:
                     for photo in submission.photos
                 ],
                 system_prompt=RECOGNIZE_ANSWERS_SYSTEM,
+                tasks=[
+                    {"index": task["index"], "statement": task["statement"]}
+                    for task in work.tasks
+                ],
             )
             answers = {item["task_index"]: item for item in recognized}
 

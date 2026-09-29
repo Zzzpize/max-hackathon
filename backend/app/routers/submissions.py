@@ -45,8 +45,8 @@ async def create_submission(
     photos: list[UploadFile] = File(...),
     session: AsyncSession = Depends(get_session),
 ) -> Submission:
-    if not 1 <= len(photos) <= 4:
-        raise HTTPException(status_code=422, detail="provide 1 to 4 photos")
+    if not 1 <= len(photos) <= 10:
+        raise HTTPException(status_code=422, detail="provide 1 to 10 photos")
 
     work = await session.get(WorkTemplate, work_id)
     if work is None:
