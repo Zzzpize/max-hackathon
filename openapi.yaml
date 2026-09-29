@@ -285,6 +285,160 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /homework:
+    post:
+      summary: Сгенерировать и сохранить домашнее задание
+      description: |
+        Независимая домашка: WorkTemplate не создаётся. При ошибке модели
+        выполняется одна повторная попытка; при повторной ошибке — 502.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HomeworkCreate" }
+      responses:
+        "201":
+          description: Создано
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Homework" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/InvalidHomework" }
+        "502": { $ref: "#/components/responses/GenerationFailed" }
+    get:
+      summary: Домашние задания текущего учителя
+      description: Сортировка по updated_at DESC, затем id ASC. Фильтры применяются до пагинации.
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, minimum: 1 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0, minimum: 0 }
+        - in: query
+          name: subject
+          schema: { $ref: "#/components/schemas/HomeworkSubject" }
+        - in: query
+          name: grade
+          schema: { type: integer, minimum: 1, maximum: 11 }
+        - in: query
+          name: topic
+          description: Поиск подстроки без учёта регистра; проценты и подчёркивания трактуются буквально.
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Homework" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/InvalidHomework" }
+
+  /homework/{homework_id}:
+    parameters:
+      - $ref: "#/components/parameters/HomeworkId"
+    get:
+      summary: Получить домашнее задание
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Homework" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Изменить название, заметки или задачи
+      description: |
+        Меняются только переданные поля. tasks заменяется целиком; нумерация
+        от 1 без пропусков. notes=null очищает заметки. title/tasks=null запрещены.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HomeworkPatch" }
+      responses:
+        "200":
+          description: Сохранено
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Homework" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/InvalidHomework" }
+    delete:
+      summary: Удалить домашнее задание
+      responses:
+        "204": { description: Удалено, тело ответа отсутствует }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /homework/{homework_id}/regenerate:
+    parameters:
+      - $ref: "#/components/parameters/HomeworkId"
+    post:
+      summary: Заменить задачи новым вариантом
+      description: |
+        Сохраняются id, title, notes, subject, grade, topic и исходный prompt.
+        Количество задач берётся из текущей версии, включая ручные изменения.
+        extra_prompt применяется только к этому запросу. Ошибка генерации
+        оставляет предыдущую версию и updated_at без изменений.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HomeworkRegenerate" }
+      responses:
+        "200":
+          description: Новая версия сохранена
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Homework" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/InvalidHomework" }
+        "502": { $ref: "#/components/responses/GenerationFailed" }
+
+  /homework/{homework_id}/export:
+    parameters:
+      - $ref: "#/components/parameters/HomeworkId"
+    get:
+      summary: Скачать домашнее задание в TXT или PDF
+      description: |
+        TXT в UTF-8; PDF A4 с четырьмя строками для решения после каждой задачи.
+        Ответы по умолчанию включены: отдельный блок TXT, новая страница PDF.
+        Заметки и исходный запрос учителя не экспортируются.
+        Требуются те же заголовки авторизации, что и для остальных endpoints.
+      parameters:
+        - in: query
+          name: format
+          required: true
+          schema: { type: string, enum: [txt, pdf] }
+        - in: query
+          name: with_answers
+          schema: { type: boolean, default: true }
+      responses:
+        "200":
+          description: Файл для скачивания
+          headers:
+            Content-Disposition:
+              description: attachment; ASCII filename и UTF-8 filename* вида homework-<title>-<date>.<ext>
+              schema: { type: string }
+          content:
+            text/plain:
+              schema: { type: string }
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/InvalidHomework" }
+
   /storage/{path}:
     get:
       summary: Скачать файл работы (фото)
@@ -305,6 +459,13 @@ paths:
               schema: { type: string, format: binary }
 
 components:
+  parameters:
+    HomeworkId:
+      in: path
+      name: homework_id
+      required: true
+      schema: { type: string }
+
   securitySchemes:
     MaxInitData:
       type: apiKey
@@ -319,6 +480,12 @@ components:
         `X-Teacher-Id: <max_user_id>` header.
 
   responses:
+    Unauthorized:
+      description: Отсутствуют, неверны или просрочены данные авторизации
+    InvalidHomework:
+      description: Некорректные параметры домашнего задания
+    GenerationFailed:
+      description: Модель недоступна или вернула невалидные задачи после двух попыток
     Forbidden:
       description: Ресурс принадлежит другому учителю
       content:
@@ -337,6 +504,68 @@ components:
               detail: { type: string }
 
   schemas:
+    HomeworkSubject:
+      type: string
+      enum: [math, algebra, physics, geometry]
+
+    HomeworkTask:
+      type: object
+      required: [index, statement, expected_answer]
+      properties:
+        index: { type: integer, minimum: 1 }
+        statement: { type: string, minLength: 1 }
+        expected_answer: { type: string, minLength: 1 }
+        difficulty: { type: string, enum: [easy, medium, hard] }
+
+    HomeworkCreate:
+      type: object
+      required: [subject, grade, topic, n_tasks, prompt]
+      properties:
+        title: { type: string, nullable: true, minLength: 1, maxLength: 200 }
+        subject: { $ref: "#/components/schemas/HomeworkSubject" }
+        grade: { type: integer, minimum: 1, maximum: 11 }
+        topic: { type: string, minLength: 1, maxLength: 200 }
+        n_tasks: { type: integer, minimum: 1, maximum: 30 }
+        prompt: { type: string, minLength: 5, maxLength: 2000 }
+
+    HomeworkPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        notes: { type: string, nullable: true }
+        tasks:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items: { $ref: "#/components/schemas/HomeworkTask" }
+
+    HomeworkRegenerate:
+      type: object
+      properties:
+        extra_prompt: { type: string, nullable: true, maxLength: 2000 }
+
+    Homework:
+      type: object
+      required: [id, teacher_id, title, subject, grade, topic, prompt, tasks, notes, created_at, updated_at]
+      properties:
+        id: { type: string }
+        teacher_id: { type: string }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        subject: { $ref: "#/components/schemas/HomeworkSubject" }
+        grade: { type: integer, minimum: 1, maximum: 11 }
+        topic: { type: string, minLength: 1, maxLength: 200 }
+        prompt: { type: string, minLength: 5, maxLength: 2000 }
+        tasks:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items: { $ref: "#/components/schemas/HomeworkTask" }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
     TeacherState:
       type: object
       properties:

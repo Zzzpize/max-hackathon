@@ -4,6 +4,7 @@ import re
 
 from app.llm.gigachat import gigachat_client
 from app.models import WorkTemplate
+from app.modules.generate import core
 from app.schemas.work import TaskDefinition
 
 logger = logging.getLogger(__name__)
@@ -108,8 +109,8 @@ async def generate_work(topic: str, grade: int, n_tasks: int) -> WorkTemplate:
     if gigachat_client._credentials:
         for attempt in range(2):
             try:
-                raw = await gigachat_client.generate_tasks(prompt)
-                tasks = _validate_tasks(raw, grade, n_tasks)
+                generated = await core.generate_tasks("math", grade, topic, n_tasks, prompt)
+                tasks = _validate_tasks(json.dumps({"tasks": generated}), grade, n_tasks)
                 return WorkTemplate(
                     title=f"Контрольная: {topic}",
                     subject="math",

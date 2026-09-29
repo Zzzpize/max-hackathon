@@ -13,7 +13,7 @@ from app.db import Base, engine, get_session
 from app.models import Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
 from app.modules.check.queue import worker
-from app.routers import stats, students, submissions, teachers, works, roadmaps
+from app.routers import homework, stats, students, submissions, teachers, works, roadmaps
 
 
 @asynccontextmanager
@@ -49,6 +49,7 @@ app.include_router(students.router)
 app.include_router(stats.router)
 app.include_router(teachers.router)
 app.include_router(roadmaps.router)
+app.include_router(homework.router)
 
 storage_root = Path(settings.storage_dir)
 storage_root.mkdir(parents=True, exist_ok=True)
