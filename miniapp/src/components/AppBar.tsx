@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { maxBridge } from "../max/bridge";
 
 const TITLES: [RegExp, string][] = [
-  [/^\/$/, "Помощник учителя"],
+  [/^\/$/, "Проверка"],
   [/^\/submit/, "Загрузить фото"],
   [/^\/pick\/work/, "Выбрать работу"],
   [/^\/pick\/student/, "Выбрать ученика"],
@@ -12,6 +12,14 @@ const TITLES: [RegExp, string][] = [
   [/^\/review\//, "Проверка работы"],
   [/^\/student\//, "Профиль ученика"],
   [/^\/dashboard\//, "Дашборд класса"],
+  [/^\/roadmaps\/new/, "Новый план"],
+  [/^\/roadmaps\/[^/]+\/edit/, "Редактировать план"],
+  [/^\/roadmaps\/[^/]+$/, "План"],
+  [/^\/roadmaps$/, "Планы"],
+  [/^\/homework\/new/, "Новая домашка"],
+  [/^\/homework\/[^/]+\/edit/, "Редактировать домашку"],
+  [/^\/homework\/[^/]+$/, "Домашка"],
+  [/^\/homework$/, "Домашки"],
 ];
 
 function titleFor(pathname: string): string {
@@ -22,7 +30,10 @@ function titleFor(pathname: string): string {
 export function AppBar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const isRoot = location.pathname === "/";
+  const isRoot =
+    location.pathname === "/" ||
+    location.pathname === "/roadmaps" ||
+    location.pathname === "/homework";
 
   useEffect(() => {
     if (isRoot) {

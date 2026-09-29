@@ -123,6 +123,75 @@ export type TeacherState = {
   updated_at: string | null;
 };
 
+export type RoadmapSegment = {
+  index: number;
+  weeks: string;
+  topic: string;
+  objectives: string;
+  hours: number;
+  materials_hint?: string;
+};
+
+export type Roadmap = {
+  id: string;
+  teacher_id: string;
+  title: string;
+  subject: string;
+  grade: number;
+  prompt: string;
+  content: { segments: RoadmapSegment[] };
+  created_at: string;
+  updated_at: string;
+};
+
+export type RoadmapCreate = {
+  title?: string;
+  subject: string;
+  grade: number;
+  prompt: string;
+};
+
+export type RoadmapPatch = {
+  title?: string;
+  content?: { segments: RoadmapSegment[] };
+};
+
+export type HomeworkTask = {
+  index: number;
+  statement: string;
+  expected_answer: string;
+  difficulty?: "easy" | "medium" | "hard";
+};
+
+export type Homework = {
+  id: string;
+  teacher_id: string;
+  title: string;
+  subject: string;
+  grade: number;
+  topic: string;
+  prompt: string;
+  tasks: HomeworkTask[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HomeworkCreate = {
+  title?: string;
+  subject: string;
+  grade: number;
+  topic: string;
+  n_tasks: number;
+  prompt: string;
+};
+
+export type HomeworkPatch = {
+  title?: string;
+  notes?: string | null;
+  tasks?: HomeworkTask[];
+};
+
 export type ExtractedReference = {
   title: string;
   subject: string | null;
@@ -232,6 +301,91 @@ export const api = {
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return res.json();
   },
+
+  listRoadmaps: (limit = 50, offset = 0) =>
+    request<Roadmap[]>(`/roadmaps?limit=${limit}&offset=${offset}`),
+
+  createRoadmap: (payload: RoadmapCreate) =>
+    request<Roadmap>(`/roadmaps`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getRoadmap: (id: string) => request<Roadmap>(`/roadmaps/${id}`),
+
+  patchRoadmap: (id: string, payload: RoadmapPatch) =>
+    request<Roadmap>(`/roadmaps/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  regenerateRoadmapSegment: (
+    id: string,
+    index: number,
+    refine_prompt?: string
+  ) =>
+    request<Roadmap>(`/roadmaps/${id}/segments/${index}`, {
+      method: "PATCH",
+      body: JSON.stringify({ refine_prompt: refine_prompt ?? "" }),
+    }),
+
+  deleteRoadmap: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/roadmaps/${id}`, {
+      method: "DELETE",
+      headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  },
+
+  roadmapExportUrl: (id: string, format: "txt" | "pdf" = "txt"): string =>
+    `${API_BASE}/roadmaps/${id}/export?format=${format}`,
+
+  listHomework: (params?: {
+    limit?: number;
+    offset?: number;
+    subject?: string;
+    grade?: number;
+    topic?: string;
+  }) => {
+    const q = new URLSearchParams();
+    q.set("limit", String(params?.limit ?? 50));
+    q.set("offset", String(params?.offset ?? 0));
+    if (params?.subject) q.set("subject", params.subject);
+    if (params?.grade) q.set("grade", String(params.grade));
+    if (params?.topic) q.set("topic", params.topic);
+    return request<Homework[]>(`/homework?${q.toString()}`);
+  },
+
+  createHomework: (payload: HomeworkCreate) =>
+    request<Homework>(`/homework`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getHomework: (id: string) => request<Homework>(`/homework/${id}`),
+
+  patchHomework: (id: string, payload: HomeworkPatch) =>
+    request<Homework>(`/homework/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  regenerateHomework: (id: string, extra_prompt?: string) =>
+    request<Homework>(`/homework/${id}/regenerate`, {
+      method: "POST",
+      body: JSON.stringify({ extra_prompt: extra_prompt ?? "" }),
+    }),
+
+  deleteHomework: async (id: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/homework/${id}`, {
+      method: "DELETE",
+      headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  },
+
+  homeworkExportUrl: (id: string, format: "txt" | "pdf" = "txt"): string =>
+    `${API_BASE}/homework/${id}/export?format=${format}`,
 
   submitBatch: async (params: {
     workId: string;

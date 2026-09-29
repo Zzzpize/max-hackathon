@@ -1,6 +1,6 @@
 import type { Context, NextFn } from "@maxhub/max-bot-api";
 import { config } from "./config.js";
-import { handleStart } from "./handlers/start.js";
+import { handleOpenTab, handleStart } from "./handlers/start.js";
 import { handlePhoto } from "./handlers/photo.js";
 import { notifyChecked } from "./handlers/notify.js";
 import {
@@ -15,6 +15,9 @@ import { bot } from "./max.js";
 bot.api
   .setMyCommands([
     { name: "start", description: "О боте" },
+    { name: "plan", description: "Открыть учебные планы" },
+    { name: "homework", description: "Открыть домашки" },
+    { name: "check", description: "Открыть проверку контрольных" },
     { name: "work", description: "Выбрать работу для проверки" },
     { name: "student", description: "Выбрать ученика" },
   ])
@@ -22,6 +25,9 @@ bot.api
 
 bot.on("bot_started", handleStart);
 bot.command("start", handleStart);
+bot.command("plan", (ctx) => handleOpenTab(ctx, "roadmap", "📋 Планы"));
+bot.command("homework", (ctx) => handleOpenTab(ctx, "homework", "📝 Домашки"));
+bot.command("check", (ctx) => handleOpenTab(ctx, "check", "✅ Проверка"));
 bot.command("work", handleSelectWork);
 bot.command("student", handleSelectStudent);
 
@@ -38,8 +44,8 @@ bot.on("message_created", async (ctx: Context) => {
   if (!text) return;
   if (text.startsWith("/")) return;
   await ctx.reply(
-    "Пришли фото контрольной работы одного ученика. " +
-      "Не забудь выбрать работу (/work) и ученика (/student)."
+    "Пришли фото контрольной или открой мини-приложение через /start, " +
+      "/plan, /homework или /check."
   );
 });
 

@@ -3,17 +3,28 @@ import { kb, openMiniappButton } from "../max.js";
 
 export async function handleStart(ctx: Context): Promise<void> {
   const text =
-    "Привет! Я помогу проверить контрольные работы класса.\n\n" +
-    "Как это работает:\n" +
-    "1. Открой мини-приложение и создай контрольную с заданиями и эталонами.\n" +
-    "2. Добавь учеников класса.\n" +
-    "3. Выбери работу и ученика - здесь через /work и /student или в мини-приложении.\n" +
-    "4. Отправь фото прямо в чат - или загрузи через мини-приложение.\n" +
-    "5. В мини-приложении подтверди или поправь оценку одним свайпом.";
+    "Привет! Я помощник учителя. Умею три вещи:\n\n" +
+    "📋 Планы — годовые и квартальные учебные роадмапы\n" +
+    "📝 Домашки — пачки задач по теме с ответами\n" +
+    "✅ Проверка — распознавание работ учеников по фото\n\n" +
+    "Открой мини-приложение — там всё под рукой. " +
+    "Или пришли фото контрольной сразу в чат.";
 
   await ctx.reply(text, {
     attachments: [
       kb.inlineKeyboard([[openMiniappButton("Открыть мини-приложение")]]),
+    ],
+  });
+}
+
+export async function handleOpenTab(
+  ctx: Context,
+  tab: "roadmap" | "homework" | "check",
+  label: string
+): Promise<void> {
+  await ctx.reply(`Открываю: ${label}`, {
+    attachments: [
+      kb.inlineKeyboard([[openMiniappButton(label, `tab_${tab}`)]]),
     ],
   });
 }
