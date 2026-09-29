@@ -13,7 +13,7 @@ from app.models import Homework
 from app.modules.roadmap.export import SUBJECT_RU
 
 
-def render_txt(hw: Homework) -> bytes:
+def render_txt(hw: Homework, with_answers: bool = True) -> bytes:
     lines = [
         "Домашнее задание",
         f"Предмет: {SUBJECT_RU[hw.subject]}, класс: {hw.grade}",
@@ -23,12 +23,13 @@ def render_txt(hw: Homework) -> bytes:
     ]
     for task in hw.tasks:
         lines.extend((f"{task['index']}. {task['statement']}", ""))
-    lines.extend(("---", "Ответы (для учителя)"))
-    lines.extend(f"{task['index']}. {task['expected_answer']}" for task in hw.tasks)
+    if with_answers:
+        lines.extend(("---", "Ответы (для учителя)"))
+        lines.extend(f"{task['index']}. {task['expected_answer']}" for task in hw.tasks)
     return "\n".join(lines).encode("utf-8")
 
 
-def render_pdf(hw: Homework) -> bytes:
+def render_pdf(hw: Homework, with_answers: bool = True) -> bytes:
     font_path = next(
         path for path in (
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
@@ -53,11 +54,12 @@ def render_pdf(hw: Homework) -> bytes:
             Paragraph(escape(f"{task['index']}. {task['statement']}").replace("\n", "<br/>"), style),
             Spacer(1, 60),
         ))
-    content.extend((PageBreak(), Paragraph("Ответы (для учителя)", style), Spacer(1, 12)))
-    for task in hw.tasks:
-        content.extend((
-            Paragraph(escape(f"{task['index']}. {task['expected_answer']}").replace("\n", "<br/>"), style),
-            Spacer(1, 8),
-        ))
+    if with_answers:
+        content.extend((PageBreak(), Paragraph("Ответы (для учителя)", style), Spacer(1, 12)))
+        for task in hw.tasks:
+            content.extend((
+                Paragraph(escape(f"{task['index']}. {task['expected_answer']}").replace("\n", "<br/>"), style),
+                Spacer(1, 8),
+            ))
     doc.build(content)
     return buffer.getvalue()

@@ -96,11 +96,21 @@ async def list_homework(
     teacher_id: str = Depends(current_teacher),
     limit: int = Query(default=50, ge=1),
     offset: int = Query(default=0, ge=0),
+    subject: Subject | None = None,
+    grade: int | None = Query(default=None, ge=1, le=11),
+    topic: str | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> list[Homework]:
+    query = select(Homework).where(Homework.teacher_id == teacher_id)
+    if subject is not None:
+        query = query.where(Homework.subject == subject)
+    if grade is not None:
+        query = query.where(Homework.grade == grade)
+    if topic:
+        search = topic.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(Homework.topic.ilike(f"%{search}%", escape="\\"))
     result = await session.scalars(
-        select(Homework).where(Homework.teacher_id == teacher_id)
-        .order_by(Homework.updated_at.desc(), Homework.id).limit(limit).offset(offset)
+        query.order_by(Homework.updated_at.desc(), Homework.id).limit(limit).offset(offset)
     )
     return list(result.all())
 
@@ -168,6 +178,7 @@ async def regenerate_homework(
 async def export_homework(
     homework_id: str,
     format: Literal["txt", "pdf"] = Query(...),
+    with_answers: bool = True,
     teacher_id: str = Depends(current_teacher),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
@@ -176,7 +187,8 @@ async def export_homework(
     safe_title = re.sub(r"[^A-Za-z0-9_-]+", "-", homework.title).strip("-") or "homework"
     fallback = f"homework-{safe_title}-{homework.created_at:%Y-%m-%d}.{format}"
     return Response(
-        content=render_txt(homework) if format == "txt" else render_pdf(homework),
+        content=(render_txt(homework, with_answers=with_answers) if format == "txt"
+                 else render_pdf(homework, with_answers=with_answers)),
         media_type="text/plain; charset=utf-8" if format == "txt" else "application/pdf",
         headers={"Content-Disposition": (
             f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"

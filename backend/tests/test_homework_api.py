@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from app.main import app
+from app.models import Homework
 from app.modules.generate import core
 
 
@@ -23,6 +24,35 @@ async def test_generate_and_list(sessions, monkeypatch, auth_headers):
         listed = await client.get("/homework", headers=auth_headers(1))
         assert listed.status_code == 200
         assert [item["id"] for item in listed.json()] == [created.json()["id"]]
+
+
+@pytest.mark.asyncio
+async def test_list_filters(sessions, auth_headers):
+    async with sessions() as session:
+        homeworks = [
+            Homework(teacher_id="1", title="A", subject="math", grade=4,
+                     topic="Сложение дробей", prompt="Задачи про дроби", tasks=[TASK]),
+            Homework(teacher_id="1", title="B", subject="math", grade=5,
+                     topic="Вычитание дробей", prompt="Задачи про дроби", tasks=[TASK]),
+            Homework(teacher_id="1", title="C", subject="physics", grade=4,
+                     topic="Сила", prompt="Задачи про силу", tasks=[TASK]),
+            Homework(teacher_id="2", title="D", subject="math", grade=4,
+                     topic="Сложение дробей", prompt="Задачи про дроби", tasks=[TASK]),
+        ]
+        session.add_all(homeworks)
+        await session.commit()
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        for params, expected in (
+            ({"subject": "math"}, {"A", "B"}),
+            ({"grade": 4}, {"A", "C"}),
+            ({"topic": "дроб"}, {"A", "B"}),
+            ({"subject": "math", "grade": 4, "topic": "Слож"}, {"A"}),
+            ({"topic": "%"}, set()),
+        ):
+            response = await client.get("/homework", params=params, headers=auth_headers(1))
+            assert response.status_code == 200, response.text
+            assert {item["title"] for item in response.json()} == expected
 
 
 @pytest.mark.asyncio
