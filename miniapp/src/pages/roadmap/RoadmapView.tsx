@@ -33,10 +33,19 @@ export function RoadmapView() {
 
   const regenerate = async (index: number) => {
     if (!roadmapId) return;
-    const refine = window.prompt("Что именно поправить в этом блоке? (можно пусто)") ?? "";
+    const refine = window.prompt(
+      "Что именно поправить в этом блоке? Опиши, что не так или что хочется."
+    );
+    if (refine === null) return;
+    const trimmed = refine.trim();
+    if (!trimmed) {
+      setError("Опиши, что поправить — без этого модель не поймёт задачу.");
+      return;
+    }
+    setError(null);
     setRegenerating(index);
     try {
-      const updated = await api.regenerateRoadmapSegment(roadmapId, index, refine);
+      const updated = await api.regenerateRoadmapSegment(roadmapId, index, trimmed);
       setRoadmap(updated);
     } catch (e) {
       setError(String(e));

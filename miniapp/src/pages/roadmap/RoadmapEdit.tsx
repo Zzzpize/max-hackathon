@@ -38,6 +38,16 @@ export function RoadmapEdit() {
         .map((s, i) => ({ ...s, index: i + 1 }))
     );
 
+  const moveSeg = (index: number, direction: -1 | 1) =>
+    setSegments((prev) => {
+      const pos = prev.findIndex((s) => s.index === index);
+      const target = pos + direction;
+      if (pos < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[pos], next[target]] = [next[target], next[pos]];
+      return next.map((s, i) => ({ ...s, index: i + 1 }));
+    });
+
   const addSeg = () =>
     setSegments((prev) => [
       ...prev,
@@ -85,16 +95,36 @@ export function RoadmapEdit() {
       </div>
 
       <h2>Блоки</h2>
-      {segments.map((s) => (
+      {segments.map((s, i) => (
         <div key={s.index} className="card">
           <div className="row spread" style={{ marginBottom: 6 }}>
             <b>Блок {s.index}</b>
-            <button
-              className="btn subtle danger"
-              onClick={() => removeSeg(s.index)}
-            >
-              Удалить
-            </button>
+            <div className="row" style={{ gap: 4 }}>
+              <button
+                className="btn subtle"
+                onClick={() => moveSeg(s.index, -1)}
+                disabled={i === 0}
+                aria-label="Выше"
+                style={{ padding: "4px 8px" }}
+              >
+                ↑
+              </button>
+              <button
+                className="btn subtle"
+                onClick={() => moveSeg(s.index, 1)}
+                disabled={i === segments.length - 1}
+                aria-label="Ниже"
+                style={{ padding: "4px 8px" }}
+              >
+                ↓
+              </button>
+              <button
+                className="btn subtle danger"
+                onClick={() => removeSeg(s.index)}
+              >
+                Удалить
+              </button>
+            </div>
           </div>
           <label className="label">Недели</label>
           <input
