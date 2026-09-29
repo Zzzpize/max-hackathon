@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://checker:checker@postgres:5432/checker"
-    storage_dir: str = "/app/storage"
+    storage_dir: str = "storage"
     redis_url: str = "redis://redis:6379/0"
     dev_auto_create_tables: bool = False
 
