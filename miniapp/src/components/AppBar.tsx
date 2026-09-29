@@ -36,13 +36,9 @@ export function AppBar() {
     location.pathname === "/homework";
 
   useEffect(() => {
-    if (isRoot) {
-      maxBridge.backButton.hide();
-      return;
-    }
-    maxBridge.backButton.show();
-    maxBridge.backButton.onClick(() => navigate(-1));
-    return () => maxBridge.backButton.hide();
+    maxBridge.backButton.setHandler(() => navigate(-1));
+    if (isRoot) maxBridge.backButton.hide();
+    else maxBridge.backButton.show();
   }, [isRoot, navigate]);
 
   return (

@@ -222,6 +222,14 @@ export const api = {
 
   getWork: (workId: string) => request<WorkTemplate>(`/works/${workId}`),
 
+  deleteWork: async (workId: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/works/${workId}`, {
+      method: "DELETE",
+      headers: { ...authHeaders() },
+    });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  },
+
   listStudents: () => request<Student[]>(`/students`),
 
   createStudent: (payload: StudentCreate) =>

@@ -1,9 +1,13 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
 import { Loader } from "../../components/Loader";
 import {
-  gradesForSubject,
+  ALL_GRADES,
+  firstSubjectFor,
+  nearestGradeFor,
+  SUBJECTS,
+  subjectOptionLabel,
   subjectsForGrade,
   type SubjectId,
 } from "../../subjects";
@@ -19,19 +23,16 @@ export function HomeworkCreate() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const availableGrades = useMemo(() => gradesForSubject(subject), [subject]);
-  const availableSubjects = useMemo(() => subjectsForGrade(grade), [grade]);
-
   const changeSubject = (next: SubjectId) => {
     setSubject(next);
-    const grades = gradesForSubject(next);
-    if (!grades.includes(grade)) setGrade(grades[0]);
+    setGrade(nearestGradeFor(next, grade));
   };
 
   const changeGrade = (next: number) => {
     setGrade(next);
-    const subs = subjectsForGrade(next);
-    if (!subs.some((s) => s.id === subject)) setSubject(subs[0].id);
+    if (!subjectsForGrade(next).some((s) => s.id === subject)) {
+      setSubject(firstSubjectFor(next));
+    }
   };
 
   const canSubmit =
@@ -80,9 +81,9 @@ export function HomeworkCreate() {
           value={subject}
           onChange={(e) => changeSubject(e.target.value as SubjectId)}
         >
-          {availableSubjects.map((s) => (
+          {SUBJECTS.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.label}
+              {subjectOptionLabel(s)}
             </option>
           ))}
         </select>
@@ -93,7 +94,7 @@ export function HomeworkCreate() {
           value={grade}
           onChange={(e) => changeGrade(Number(e.target.value))}
         >
-          {availableGrades.map((g) => (
+          {ALL_GRADES.map((g) => (
             <option key={g} value={g}>
               {g} класс
             </option>

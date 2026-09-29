@@ -4,16 +4,17 @@ import tempfile
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import current_teacher
+from app.config import settings
 from app.db import get_session
 from app.llm.gigachat import gigachat_client
-from app.models import WorkTemplate
+from app.models import CheckResult, Submission, WorkTemplate
 from app.modules.check.prompts import EXTRACT_REFERENCE_SYSTEM
 from app.modules.generate.pipeline import generate_work
 from app.schemas.work import WorkTemplateCreate, WorkTemplateOut
@@ -189,3 +190,54 @@ async def get_work(
     if work.teacher_id != teacher_id:
         raise HTTPException(status_code=403, detail="work belongs to another teacher")
     return work
+
+
+@router.delete("/{work_id}", status_code=204)
+async def delete_work(
+    work_id: str,
+    teacher_id: str = Depends(current_teacher),
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    async with session.begin():
+        work = await session.get(WorkTemplate, work_id, with_for_update=True)
+        if work is None:
+            raise HTTPException(status_code=404, detail="work not found")
+        if work.teacher_id != teacher_id:
+            raise HTTPException(status_code=403, detail="work belongs to another teacher")
+
+        submission_ids = list((
+            await session.scalars(
+                select(Submission.id).where(Submission.work_id == work_id)
+            )
+        ).all())
+
+        if any(
+            Path(submission_id).name != submission_id or submission_id in (".", "..")
+            for submission_id in submission_ids
+        ):
+            raise HTTPException(status_code=500, detail="invalid submission id")
+
+        if submission_ids:
+            await session.execute(
+                delete(CheckResult).where(CheckResult.submission_id.in_(submission_ids))
+            )
+            await session.execute(
+                delete(Submission).where(Submission.id.in_(submission_ids))
+            )
+        await session.delete(work)
+
+    storage = Path(settings.storage_dir)
+    cleanup_failed = False
+    for submission_id in submission_ids:
+        try:
+            shutil.rmtree(storage / submission_id)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.exception("Photo cleanup failed for submission %s", submission_id)
+            cleanup_failed = True
+
+    if cleanup_failed:
+        raise HTTPException(status_code=500, detail="work deleted but photo cleanup failed")
+
+    return Response(status_code=204)

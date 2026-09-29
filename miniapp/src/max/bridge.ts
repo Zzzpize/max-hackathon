@@ -73,8 +73,21 @@ export const maxBridge = {
     hide(): void {
       webApp?.BackButton?.hide?.();
     },
-    onClick(cb: () => void): void {
-      webApp?.BackButton?.onClick?.(cb);
+    /**
+     * MAX WebView (как и Telegram) регистрирует onClick аддитивно: каждый
+     * повторный вызов добавляет ещё один слушатель, старые не снимаются.
+     * Поэтому регистрируем ровно один раз, а конкретный колбэк подменяем
+     * через замыкание над переменной. Идемпотентно.
+     */
+    setHandler(cb: () => void): void {
+      currentBackHandler = cb;
+      if (!backHandlerBound) {
+        webApp?.BackButton?.onClick?.(() => currentBackHandler?.());
+        backHandlerBound = true;
+      }
     },
   },
 };
+
+let currentBackHandler: (() => void) | null = null;
+let backHandlerBound = false;

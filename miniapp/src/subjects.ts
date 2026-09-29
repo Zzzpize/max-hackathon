@@ -21,3 +21,24 @@ export function gradesForSubject(subject: SubjectId): number[] {
 export function subjectLabel(id: string): string {
   return SUBJECTS.find((s) => s.id === id)?.label ?? id;
 }
+
+export function subjectOptionLabel(subject: typeof SUBJECTS[number]): string {
+  const gs = subject.grades;
+  const range = gs[0] === gs[gs.length - 1] ? `${gs[0]}` : `${gs[0]}–${gs[gs.length - 1]}`;
+  return `${subject.label} (${range} кл.)`;
+}
+
+/** Ближайший допустимый для предмета класс. Если текущий подходит — вернёт его. */
+export function nearestGradeFor(subject: SubjectId, current: number): number {
+  const grades = gradesForSubject(subject);
+  if (grades.includes(current)) return current;
+  return grades.reduce(
+    (best, g) => (Math.abs(g - current) < Math.abs(best - current) ? g : best),
+    grades[0]
+  );
+}
+
+/** Первый предмет, поддерживающий класс. Если такого нет — вернёт math. */
+export function firstSubjectFor(grade: number): SubjectId {
+  return subjectsForGrade(grade)[0]?.id ?? "math";
+}
