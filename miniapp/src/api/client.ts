@@ -114,6 +114,7 @@ export type TaskCheck = {
     w: number;
     h: number;
   }[];
+  student_work?: string[];
   teacher_verdict: { is_correct: boolean; comment: string } | null;
 };
 

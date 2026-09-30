@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 
 from gigachat import GigaChat
+from gigachat.exceptions import ResponseError
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
@@ -15,6 +16,18 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 ERROR_TYPES = {"вычислительная", "методологическая", "невнимательность", "не распознано"}
+
+
+def _parse_json_object(content: str) -> dict:
+    """Модель иногда оборачивает JSON в ```json …``` или добавляет текст вокруг."""
+    text = (content or "").strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("no JSON object in response")
+    data = json.loads(text[start:end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("JSON root is not an object")
+    return data
 
 
 class GigaChatClient:
@@ -29,7 +42,7 @@ class GigaChatClient:
 
         self._redis = Redis.from_url(settings.redis_url, decode_responses=True)
 
-    async def _client(self) -> GigaChat:
+    async def _client(self, timeout: float | None = None) -> GigaChat:
         async with self._token_lock:
             if self._access_token is None or time.time() >= self._expires_at - 60:
                 async with GigaChat(
@@ -44,35 +57,35 @@ class GigaChatClient:
                     self._access_token = token.access_token
                     self._expires_at = token.expires_at / 1000
 
+            extra = {"timeout": timeout} if timeout is not None else {}
             return GigaChat(
                 access_token=self._access_token,
                 model=self._model,
                 verify_ssl_certs=self._verify_ssl,
+                **extra,
             )
 
-    async def recognize_answers(
+    async def transcribe_photos(
         self,
         photos: list[Path],
         system_prompt: str,
-        tasks: list[dict] | None = None,
-    ) -> list[dict]:
+        user_content: str,
+        temperature: float = 0.1,
+    ) -> str:
+        """Vision-вызов, возвращает сырой текст модели (построчная расшифровка).
+        Полная расшифровка страницы у Ultra идёт дольше дефолтных 30 с SDK.
+
+        Сетевые сбои и 5xx/429 от GigaChat после повтора пробрасываются:
+        очередь проверок перезапустит работу с бэкоффом. Глушить их нельзя —
+        пустая расшифровка превратила бы временный сбой в «всё на ручную
+        проверку» и закрыла бы работу."""
         if not self._credentials:
             logger.warning("GigaChat credentials not set")
-            return []
-
-        task_lines = ""
-        if tasks:
-            task_lines = "\n\nОжидаемые задания (сверяй по СМЫСЛУ условия, не по номеру на листе):\n" + "\n".join(
-                f"{t['index']}. {t['statement']}" for t in tasks
-            )
-        user_content = (
-            "Распознай финальные ответы ученика на приложенных фото."
-            + task_lines
-        )
+            return ""
 
         for attempt in range(2):
             try:
-                async with await self._client() as client:
+                async with await self._client(timeout=180) as client:
                     attachments = []
                     for photo in photos:
                         with photo.open("rb") as file:
@@ -90,29 +103,50 @@ class GigaChatClient:
                                 "attachments": attachments,
                             },
                         ],
+                        "temperature": temperature,
+                        "top_p": 0.1,
+                        "repetition_penalty": 1.05,
+                        "max_tokens": 2500,
+                    })
+                return str(response.choices[0].message.content or "")
+            except (httpx.TransportError, httpx.TimeoutException, ResponseError):
+                logger.warning("GigaChat transcribe request failed, attempt %s", attempt + 1)
+                if attempt == 1:
+                    raise
+                await asyncio.sleep(3)
+            except (AttributeError, IndexError, TypeError):
+                logger.warning("Invalid GigaChat transcribe response, attempt %s", attempt + 1)
+
+        return ""
+
+    async def complete_json(self, system_prompt: str, user_content: str) -> dict:
+        """Text-only вызов с низкой температурой, ответ — JSON-объект.
+        Возвращает {} при невалидном ответе после двух попыток."""
+        if not self._credentials:
+            logger.warning("GigaChat credentials not set")
+            return {}
+
+        for attempt in range(2):
+            try:
+                async with await self._client(timeout=120) as client:
+                    response = await client.achat({
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content},
+                        ],
                         "temperature": 0.1,
                         "top_p": 0.1,
                     })
+                return _parse_json_object(response.choices[0].message.content)
+            except (json.JSONDecodeError, TypeError, ValueError, IndexError, AttributeError):
+                logger.warning("Invalid GigaChat JSON response, attempt %s", attempt + 1)
+            except (httpx.TransportError, httpx.TimeoutException, ResponseError):
+                logger.warning("GigaChat JSON request failed, attempt %s", attempt + 1)
+                if attempt == 1:
+                    raise
+                await asyncio.sleep(3)
 
-                data = json.loads(response.choices[0].message.content)
-                return [
-                    {
-                        "task_index": int(item["task_index"]),
-                        "answer": str(item["answer"]),
-                        "raw_context": str(item.get("raw_context", "")),
-                        "confidence": float(item["confidence"]),
-                        "photo_boxes": item.get("photo_boxes", []),
-                    }
-                    for item in data["answers"]
-                ]
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError, IndexError):
-                logger.warning("Invalid GigaChat vision response, attempt %s", attempt + 1)
-            except httpx.TransportError:
-                logger.warning("GigaChat vision request failed, attempt %s", attempt + 1)
-                if attempt == 0:
-                    await asyncio.sleep(1)
-
-        return []
+        return {}
     
     
     async def check_task(
@@ -121,9 +155,11 @@ class GigaChatClient:
         statement: str,
         expected_answer: str,
         student_answer: str,
+        student_work: str = "",
     ) -> dict:
         key = hashlib.sha256(json.dumps(
-            [statement, expected_answer, student_answer], ensure_ascii=False
+            [system_prompt, statement, expected_answer, student_answer, student_work],
+            ensure_ascii=False,
         ).encode()).hexdigest()
 
         # Кэш чтения — без глобального лока, чтобы параллельные проверки
@@ -137,7 +173,7 @@ class GigaChatClient:
             logger.warning("Redis cache read failed; falling back to LLM")
 
         result = await self._check_task_uncached(
-            system_prompt, statement, expected_answer, student_answer
+            system_prompt, statement, expected_answer, student_answer, student_work
         )
 
         try:
@@ -159,6 +195,7 @@ class GigaChatClient:
         statement: str,
         expected_answer: str,
         student_answer: str,
+        student_work: str = "",
     ) -> dict:
         fallback = {
             "correct": student_answer.strip() == expected_answer.strip(),
@@ -175,13 +212,14 @@ class GigaChatClient:
                 "statement": statement,
                 "expected_answer": expected_answer,
                 "student_answer": student_answer,
+                "student_work": student_work,
             },
             ensure_ascii=False,
         )
 
         for attempt in range(2):
             try:
-                async with await self._client() as client:
+                async with await self._client(timeout=120) as client:
                     response = await client.achat({
                         "messages": [
                             {"role": "system", "content": system_prompt},
@@ -191,7 +229,7 @@ class GigaChatClient:
                         "top_p": 0.1,
                     })
 
-                data = json.loads(response.choices[0].message.content)
+                data = _parse_json_object(response.choices[0].message.content)
                 if not isinstance(data["correct"], bool):
                     raise ValueError("correct must be boolean")
                 if not isinstance(data["explanation"], str):

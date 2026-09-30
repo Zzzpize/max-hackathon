@@ -6,6 +6,7 @@ import pytest
 from app.models import CheckResult, Student, Submission, WorkTemplate
 from app.models.submission import SubmissionStatus
 from app.modules.check import pipeline
+from app.modules.check.recognize import RecognizedTask
 
 
 @pytest.mark.asyncio
@@ -31,15 +32,15 @@ async def test_pipeline_with_stub_llm(sessions, monkeypatch):
         ])
         await session.commit()
 
-    recognize = AsyncMock(return_value=[
-        {"task_index": 1, "answer": "2", "confidence": 0.9},
-        {"task_index": 2, "answer": "4", "confidence": 0.7},
-    ])
+    recognize = AsyncMock(return_value={
+        1: RecognizedTask(answer="2", confidence=0.9, work_lines=["1 + 1 = 2"]),
+        2: RecognizedTask(answer="4", confidence=0.7, work_lines=["2 + 2 = 4"]),
+    })
     check = AsyncMock(side_effect=[
         {"correct": True, "explanation": "", "reasoning_graph": []},
         {"correct": False, "explanation": "Ошибка", "reasoning_graph": [], "error_type": "вычислительная"},
     ])
-    monkeypatch.setattr(pipeline.gigachat_client, "recognize_answers", recognize)
+    monkeypatch.setattr(pipeline, "recognize_submission", recognize)
     monkeypatch.setattr(pipeline.gigachat_client, "check_task", check)
 
     post = AsyncMock(return_value=SimpleNamespace(raise_for_status=lambda: None))
@@ -68,7 +69,9 @@ async def test_pipeline_with_stub_llm(sessions, monkeypatch):
         assert result.total_score == 2
         assert result.confidence == pytest.approx(0.8)
         assert result.per_task[1]["error_type"] == "вычислительная"
+        assert result.per_task[0]["student_work"] == ["1 + 1 = 2"]
     assert check.await_count == 2
+    assert check.await_args_list[0].kwargs["student_work"] == "1 + 1 = 2"
     assert post.await_args.kwargs["json"] == {
         "teacher_id": "teacher-1",
         "event": "submission_checked",

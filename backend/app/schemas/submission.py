@@ -32,6 +32,7 @@ class TaskCheck(BaseModel):
     error_type: Literal["вычислительная", "методологическая", "невнимательность", "не распознано"] | None = None
     reasoning_graph: list[ReasoningStep] = Field(default_factory=list)
     photo_boxes: list[PhotoBox] = Field(default_factory=list)
+    student_work: list[str] = Field(default_factory=list)
     teacher_verdict: TeacherVerdict | None = None
 
 

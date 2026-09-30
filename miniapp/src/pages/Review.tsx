@@ -255,6 +255,26 @@ function TaskCard({
         </p>
       )}
 
+      {task.student_work && task.student_work.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="label">Запись ученика (распознано с фото)</div>
+          <div
+            style={{
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              padding: "6px 10px",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: 13,
+              lineHeight: 1.5,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {task.student_work.join("\n")}
+          </div>
+        </div>
+      )}
+
       {task.reasoning_graph.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <div className="label">Ход решения</div>

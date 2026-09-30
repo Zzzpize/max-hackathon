@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,7 +35,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Помощник учителя API",
     version="0.2.0",
-    root_path="/api",
+    servers=[{"url": "/api"}],
+    docs_url=None,
     lifespan=lifespan,
 )
 
@@ -45,6 +48,11 @@ async def api_root() -> dict[str, str]:
         "docs": "/api/docs",
         "openapi": "/api/openapi.json",
     }
+
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui() -> HTMLResponse:
+    return get_swagger_ui_html(openapi_url="/api/openapi.json", title="Помощник учителя API")
 
 app.add_middleware(
     CORSMiddleware,

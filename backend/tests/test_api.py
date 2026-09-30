@@ -9,6 +9,7 @@ from PIL import Image
 from app.main import app
 from app.models import CheckResult, Student, StudentProfile, Submission, WorkTemplate
 from app.modules.check import pipeline
+from app.modules.check.recognize import RecognizedTask
 from app.modules.memory import profile
 from app.routers import submissions as submission_router
 
@@ -34,11 +35,11 @@ async def test_submission_lifecycle(sessions, monkeypatch, tmp_path, auth_header
     monkeypatch.setattr(submission_router.settings, "storage_dir", str(tmp_path))
     monkeypatch.setattr(submission_router, "enqueue_check", pipeline.run_check)
     monkeypatch.setattr(
-        pipeline.gigachat_client,
-        "recognize_answers",
-        AsyncMock(return_value=[
-            {"task_index": 1, "answer": "2", "confidence": 0.8}
-        ]),
+        pipeline,
+        "recognize_submission",
+        AsyncMock(return_value={
+            1: RecognizedTask(answer="2", confidence=0.8, work_lines=["1 + 1 = 2"])
+        }),
     )
     monkeypatch.setattr(
         pipeline.gigachat_client,
