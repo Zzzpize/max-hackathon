@@ -25,6 +25,30 @@ export function photoUrl(relativePath: string): string {
   return `${base}/storage/${relativePath}`;
 }
 
+/**
+ * Скачать файл по авторизованному эндпойнту. Обычный <a href> не передаёт
+ * X-Init-Data / Bearer, поэтому серверный export возвращает 401. Здесь мы
+ * дёргаем fetch с auth-заголовками, получаем blob и триггерим скачивание.
+ */
+export async function downloadAuthorized(
+  path: string,
+  suggestedFilename: string
+): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { ...authHeaders() },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = suggestedFilename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export type WorkTemplate = {
   id: string;
   teacher_id: string;

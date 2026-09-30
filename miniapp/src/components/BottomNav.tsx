@@ -2,7 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 
 const TABS = [
   { to: "/roadmaps", icon: "📋", label: "Планы" },
-  { to: "/homework", icon: "📝", label: "Домашки" },
+  { to: "/homework", icon: "📝", label: "Задания" },
   { to: "/", icon: "✅", label: "Проверка", end: true },
 ] as const;
 

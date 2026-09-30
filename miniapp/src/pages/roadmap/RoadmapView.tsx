@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type Roadmap } from "../../api/client";
+import { api, downloadAuthorized, type Roadmap } from "../../api/client";
 import { Loader } from "../../components/Loader";
 import { subjectLabel } from "../../subjects";
+
+function sanitizeFilename(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]+/g, "").trim();
+  return cleaned || "roadmap";
+}
 
 export function RoadmapView() {
   const { roadmapId } = useParams<{ roadmapId: string }>();
@@ -11,6 +16,7 @@ export function RoadmapView() {
   const [error, setError] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (!roadmapId) return;
@@ -54,8 +60,32 @@ export function RoadmapView() {
     }
   };
 
+  const download = async (format: "txt" | "pdf") => {
+    if (!roadmap) return;
+    setBusy(format);
+    setError(null);
+    try {
+      const filename = `${sanitizeFilename(roadmap.title)}.${format}`;
+      await downloadAuthorized(`/roadmaps/${roadmap.id}/export?format=${format}`, filename);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const segmentToHomework = (topic: string) => {
+    if (!roadmap) return;
+    const params = new URLSearchParams({
+      subject: roadmap.subject,
+      grade: String(roadmap.grade),
+      topic,
+    });
+    navigate(`/homework/new?${params.toString()}`);
+  };
+
   if (!roadmap && !error) return <Loader text="Загружаю план…" />;
-  if (error) return <div className="page"><p style={{ color: "crimson" }}>{error}</p></div>;
+  if (error && !roadmap) return <div className="page"><p style={{ color: "crimson" }}>{error}</p></div>;
   if (!roadmap) return null;
 
   return (
@@ -77,6 +107,8 @@ export function RoadmapView() {
         </button>
       </div>
 
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
+
       {menuOpen && (
         <div className="card">
           <Link
@@ -86,20 +118,22 @@ export function RoadmapView() {
           >
             ✏️ Редактировать
           </Link>
-          <a
-            href={api.roadmapExportUrl(roadmap.id, "txt")}
+          <button
             className="btn wide"
-            style={{ display: "block", textAlign: "center", marginBottom: 6 }}
+            onClick={() => download("txt")}
+            disabled={busy !== null}
+            style={{ marginBottom: 6 }}
           >
-            ⬇ Скачать TXT
-          </a>
-          <a
-            href={api.roadmapExportUrl(roadmap.id, "pdf")}
+            {busy === "txt" ? "Скачиваю…" : "⬇ Скачать TXT"}
+          </button>
+          <button
             className="btn wide"
-            style={{ display: "block", textAlign: "center", marginBottom: 6 }}
+            onClick={() => download("pdf")}
+            disabled={busy !== null}
+            style={{ marginBottom: 6 }}
           >
-            ⬇ Скачать PDF
-          </a>
+            {busy === "pdf" ? "Скачиваю…" : "⬇ Скачать PDF"}
+          </button>
           <button className="btn danger wide" onClick={remove}>
             Удалить план
           </button>
@@ -110,13 +144,24 @@ export function RoadmapView() {
         <div key={seg.index} className="card">
           <div className="row spread" style={{ marginBottom: 6 }}>
             <b>Недели {seg.weeks} · {seg.hours} ч</b>
-            <button
-              className="btn subtle"
-              onClick={() => regenerate(seg.index)}
-              disabled={regenerating !== null}
-            >
-              {regenerating === seg.index ? "…" : "✏️"}
-            </button>
+            <div className="row" style={{ gap: 4 }}>
+              <button
+                className="btn subtle"
+                onClick={() => segmentToHomework(seg.topic)}
+                aria-label="Создать задание по теме"
+                title="Создать домашнее задание по теме"
+              >
+                📝
+              </button>
+              <button
+                className="btn subtle"
+                onClick={() => regenerate(seg.index)}
+                disabled={regenerating !== null}
+                aria-label="Перегенерировать блок"
+              >
+                {regenerating === seg.index ? "…" : "✏️"}
+              </button>
+            </div>
           </div>
           <div style={{ marginBottom: 6 }}>
             <div className="label">Тема</div>

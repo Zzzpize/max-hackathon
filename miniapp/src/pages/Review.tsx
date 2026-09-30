@@ -256,18 +256,24 @@ function TaskCard({
       )}
 
       {task.reasoning_graph.length > 0 && (
-        <details style={{ marginTop: 8 }}>
-          <summary className="muted-text" style={{ cursor: "pointer" }}>
-            Ход решения ({task.reasoning_graph.length} шагов)
-          </summary>
-          <ol style={{ marginTop: 6, paddingLeft: 18 }}>
+        <div style={{ marginTop: 10 }}>
+          <div className="label">Ход решения</div>
+          <ol style={{ marginTop: 4, paddingLeft: 20, marginBottom: 0 }}>
             {task.reasoning_graph.map((s, i) => (
-              <li key={i} style={{ color: s.ok ? "#065f46" : "#991b1b" }}>
+              <li
+                key={i}
+                style={{
+                  color: s.ok ? "#065f46" : "#991b1b",
+                  marginBottom: 3,
+                  lineHeight: 1.4,
+                }}
+              >
+                <span style={{ marginRight: 6 }}>{s.ok ? "✓" : "✗"}</span>
                 {s.step}
               </li>
             ))}
           </ol>
-        </details>
+        </div>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../../api/client";
 import { Loader } from "../../components/Loader";
 import {
@@ -14,10 +14,19 @@ import {
 
 export function HomeworkCreate() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const prefillSubject = params.get("subject") as SubjectId | null;
+  const prefillGrade = Number(params.get("grade")) || 0;
+  const prefillTopic = params.get("topic") ?? "";
+
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState<SubjectId>("math");
-  const [grade, setGrade] = useState<number>(3);
-  const [topic, setTopic] = useState("");
+  const [subject, setSubject] = useState<SubjectId>(
+    prefillSubject && SUBJECTS.some((s) => s.id === prefillSubject) ? prefillSubject : "math"
+  );
+  const [grade, setGrade] = useState<number>(
+    prefillGrade >= 1 && prefillGrade <= 11 ? prefillGrade : 3
+  );
+  const [topic, setTopic] = useState(prefillTopic);
   const [nTasks, setNTasks] = useState<number>(10);
   const [promptText, setPromptText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -70,7 +79,7 @@ export function HomeworkCreate() {
         <label className="label">Название (необязательно)</label>
         <input
           className="input"
-          placeholder="Домашка на 12.10: дроби"
+          placeholder="Домашнее задание на 12.10: дроби"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />

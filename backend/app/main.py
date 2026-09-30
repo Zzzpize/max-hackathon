@@ -33,8 +33,18 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Помощник учителя API",
     version="0.2.0",
+    root_path="/api",
     lifespan=lifespan,
 )
+
+
+@app.get("/", include_in_schema=False)
+async def api_root() -> dict[str, str]:
+    return {
+        "service": "Помощник учителя",
+        "docs": "/api/docs",
+        "openapi": "/api/openapi.json",
+    }
 
 app.add_middleware(
     CORSMiddleware,

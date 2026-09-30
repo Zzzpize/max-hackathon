@@ -16,10 +16,10 @@ const TITLES: [RegExp, string][] = [
   [/^\/roadmaps\/[^/]+\/edit/, "Редактировать план"],
   [/^\/roadmaps\/[^/]+$/, "План"],
   [/^\/roadmaps$/, "Планы"],
-  [/^\/homework\/new/, "Новая домашка"],
-  [/^\/homework\/[^/]+\/edit/, "Редактировать домашку"],
-  [/^\/homework\/[^/]+$/, "Домашка"],
-  [/^\/homework$/, "Домашки"],
+  [/^\/homework\/new/, "Новое задание"],
+  [/^\/homework\/[^/]+\/edit/, "Редактировать задание"],
+  [/^\/homework\/[^/]+$/, "Домашнее задание"],
+  [/^\/homework$/, "Домашние задания"],
 ];
 
 function titleFor(pathname: string): string {

@@ -47,9 +47,9 @@ export function HomeworkList() {
 
   return (
     <div className="page">
-      <h1>Домашки</h1>
+      <h1>Домашние задания</h1>
       <p className="muted-text" style={{ marginTop: -4 }}>
-        Сгенерируй пачку задач по теме и распечатай — с ответами или без.
+        Сгенерируй набор задач по теме и распечатай — с ответами или без.
       </p>
 
       <Link
@@ -57,7 +57,7 @@ export function HomeworkList() {
         className="btn primary wide"
         style={{ display: "block", textAlign: "center", margin: "12px 0" }}
       >
-        + Новая домашка
+        + Новое задание
       </Link>
 
       {showFilters && (
@@ -110,7 +110,7 @@ export function HomeworkList() {
           hint={
             subject || grade || topic
               ? "По фильтрам ничего не нашлось."
-              : "Первая домашка — по кнопке выше."
+              : "Первое задание — по кнопке выше."
           }
         />
       ) : (

@@ -16,7 +16,7 @@ bot.api
   .setMyCommands([
     { name: "start", description: "О боте" },
     { name: "plan", description: "Открыть учебные планы" },
-    { name: "homework", description: "Открыть домашки" },
+    { name: "homework", description: "Открыть домашние задания" },
     { name: "check", description: "Открыть проверку контрольных" },
     { name: "work", description: "Выбрать работу для проверки" },
     { name: "student", description: "Выбрать ученика" },
@@ -26,7 +26,7 @@ bot.api
 bot.on("bot_started", handleStart);
 bot.command("start", handleStart);
 bot.command("plan", (ctx) => handleOpenTab(ctx, "roadmap", "📋 Планы"));
-bot.command("homework", (ctx) => handleOpenTab(ctx, "homework", "📝 Домашки"));
+bot.command("homework", (ctx) => handleOpenTab(ctx, "homework", "📝 Домашние задания"));
 bot.command("check", (ctx) => handleOpenTab(ctx, "check", "✅ Проверка"));
 bot.command("work", handleSelectWork);
 bot.command("student", handleSelectStudent);

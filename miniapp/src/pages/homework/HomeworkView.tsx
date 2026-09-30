@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type Homework } from "../../api/client";
+import { api, downloadAuthorized, type Homework } from "../../api/client";
 import { Loader } from "../../components/Loader";
 import { subjectLabel } from "../../subjects";
+
+function sanitizeFilename(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]+/g, "").trim();
+  return cleaned || "homework";
+}
 
 export function HomeworkView() {
   const { homeworkId } = useParams<{ homeworkId: string }>();
@@ -12,6 +17,7 @@ export function HomeworkView() {
   const [regenerating, setRegenerating] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (!homeworkId) return;
@@ -23,7 +29,7 @@ export function HomeworkView() {
 
   const remove = async () => {
     if (!homeworkId) return;
-    if (!window.confirm("Удалить домашку?")) return;
+    if (!window.confirm("Удалить домашнее задание?")) return;
     try {
       await api.deleteHomework(homeworkId);
       navigate("/homework", { replace: true });
@@ -37,6 +43,7 @@ export function HomeworkView() {
     const extra =
       window.prompt("Что поправить? (можно пусто — просто перегенерирую)") ?? "";
     setRegenerating(true);
+    setError(null);
     try {
       const updated = await api.regenerateHomework(homeworkId, extra);
       setHw(updated);
@@ -47,8 +54,46 @@ export function HomeworkView() {
     }
   };
 
+  const download = async (format: "txt" | "pdf") => {
+    if (!hw) return;
+    setBusy(format);
+    setError(null);
+    try {
+      const filename = `${sanitizeFilename(hw.title)}.${format}`;
+      await downloadAuthorized(`/homework/${hw.id}/export?format=${format}`, filename);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendToCheck = async () => {
+    if (!hw) return;
+    if (!window.confirm(`Создать контрольную «${hw.title}» из этого задания? Задачи и эталонные ответы скопируются во вкладку «Проверка».`)) return;
+    setBusy("send");
+    setError(null);
+    try {
+      const work = await api.createWork({
+        title: hw.title,
+        subject: hw.subject,
+        grade: hw.grade,
+        tasks: hw.tasks.map((t) => ({
+          index: t.index,
+          statement: t.statement,
+          expected_answer: t.expected_answer,
+        })),
+      });
+      await api.setState({ current_work_id: work.id });
+      navigate("/");
+    } catch (e) {
+      setError(String(e));
+      setBusy(null);
+    }
+  };
+
   if (!hw && !error) return <Loader text="Загружаю…" />;
-  if (error) return <div className="page"><p style={{ color: "crimson" }}>{error}</p></div>;
+  if (error && !hw) return <div className="page"><p style={{ color: "crimson" }}>{error}</p></div>;
   if (!hw) return null;
 
   return (
@@ -70,12 +115,22 @@ export function HomeworkView() {
         </button>
       </div>
 
+      {error && <p style={{ color: "crimson" }}>{error}</p>}
+
       {menuOpen && (
         <div className="card">
           <button
+            className="btn primary wide"
+            onClick={sendToCheck}
+            disabled={busy !== null}
+            style={{ marginBottom: 6 }}
+          >
+            {busy === "send" ? "Создаю…" : "↗ Отправить в проверку"}
+          </button>
+          <button
             className="btn wide"
             onClick={regenerate}
-            disabled={regenerating}
+            disabled={regenerating || busy !== null}
             style={{ marginBottom: 6 }}
           >
             {regenerating ? "Генерирую…" : "🔄 Перегенерировать"}
@@ -87,21 +142,23 @@ export function HomeworkView() {
           >
             ✏️ Редактировать
           </Link>
-          <a
-            href={api.homeworkExportUrl(hw.id, "txt")}
+          <button
             className="btn wide"
-            style={{ display: "block", textAlign: "center", marginBottom: 6 }}
+            onClick={() => download("txt")}
+            disabled={busy !== null}
+            style={{ marginBottom: 6 }}
           >
-            ⬇ Скачать TXT
-          </a>
-          <a
-            href={api.homeworkExportUrl(hw.id, "pdf")}
+            {busy === "txt" ? "Скачиваю…" : "⬇ Скачать TXT"}
+          </button>
+          <button
             className="btn wide"
-            style={{ display: "block", textAlign: "center", marginBottom: 6 }}
+            onClick={() => download("pdf")}
+            disabled={busy !== null}
+            style={{ marginBottom: 6 }}
           >
-            ⬇ Скачать PDF
-          </a>
-          <button className="btn danger wide" onClick={remove}>
+            {busy === "pdf" ? "Скачиваю…" : "⬇ Скачать PDF"}
+          </button>
+          <button className="btn danger wide" onClick={remove} disabled={busy !== null}>
             Удалить
           </button>
         </div>

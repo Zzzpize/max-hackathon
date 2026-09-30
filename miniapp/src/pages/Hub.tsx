@@ -116,6 +116,18 @@ export function Hub() {
 
   const groups = useMemo(() => groupByDay(inbox), [inbox]);
 
+  const classes = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of students) {
+      const key = s.class_id.trim();
+      if (!key) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], "ru"))
+      .map(([classId, count]) => ({ classId, count }));
+  }, [students]);
+
   const removeStudent = async (id: string, name: string) => {
     if (!window.confirm(`Удалить ученика «${name}»? Все его работы будут удалены.`)) return;
     setBusy(id);
@@ -314,12 +326,15 @@ export function Hub() {
             {students.map((s) => (
               <div key={s.id} className="card">
                 <div className="row spread">
-                  <div style={{ minWidth: 0, flex: 1 }}>
+                  <Link
+                    to={`/student/${s.id}`}
+                    style={{ minWidth: 0, flex: 1, display: "block" }}
+                  >
                     <div style={{ fontWeight: 600, marginBottom: 2 }}>{s.display_name}</div>
                     <div className="muted-text" style={{ fontSize: 12 }}>
-                      {s.class_id} · {s.grade} кл.
+                      {s.class_id} · {s.grade} кл. · открыть профиль →
                     </div>
-                  </div>
+                  </Link>
                   <button
                     className="btn subtle danger"
                     onClick={() => removeStudent(s.id, s.display_name)}
@@ -334,6 +349,33 @@ export function Hub() {
             ))}
           </div>
         </details>
+      )}
+
+      {classes.length > 0 && (
+        <>
+          <h2 style={{ marginTop: 32 }}>Дашборды классов</h2>
+          <p className="muted-text" style={{ marginTop: -4, marginBottom: 8 }}>
+            Средний балл, слабые темы и ученики которым нужна помощь.
+          </p>
+          {classes.map((cls) => (
+            <Link
+              key={cls.classId}
+              to={`/dashboard/${encodeURIComponent(cls.classId)}`}
+              className="card"
+              style={{ display: "block" }}
+            >
+              <div className="row spread">
+                <div>
+                  <b>{cls.classId}</b>
+                  <div className="muted-text" style={{ fontSize: 12 }}>
+                    {cls.count} {cls.count === 1 ? "ученик" : cls.count < 5 ? "ученика" : "учеников"}
+                  </div>
+                </div>
+                <span className="muted-text">→</span>
+              </div>
+            </Link>
+          ))}
+        </>
       )}
     </div>
   );
