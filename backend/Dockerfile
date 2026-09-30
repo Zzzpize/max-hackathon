@@ -6,8 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Все Python-зависимости ставятся готовыми wheel-пакетами, компилятор не нужен.
+# fonts-dejavu-core — кириллица в PDF-экспорте (ReportLab); сертификаты
+# Минцифры — TLS до MAX и GigaChat.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl ca-certificates fonts-dejavu-core \
+    curl ca-certificates fonts-dejavu-core \
     && curl -fsSL -o /usr/local/share/ca-certificates/russian_trusted_root_ca.crt \
        https://gu-st.ru/content/lending/russian_trusted_root_ca_pem.crt \
     && curl -fsSL -o /usr/local/share/ca-certificates/russian_trusted_sub_ca.crt \

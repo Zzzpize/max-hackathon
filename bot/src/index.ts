@@ -64,9 +64,18 @@ if (config.webhookDomain) {
     },
   });
   console.log(`[bot] webhook mode at ${config.webhookDomain}`);
-} else {
+} else if (config.polling) {
   void bot.start();
   console.log("[bot] long polling mode");
+} else {
+  // Long polling в SDK начинается с удаления webhook-подписки бота. Если
+  // запустить локально с токеном боевого бота, рабочий бот в MAX перестанет
+  // получать сообщения. Поэтому приём сообщений локально включается только
+  // явно — MAX_BOT_POLLING=true, и лучше со своим токеном.
+  console.log(
+    "[bot] приём сообщений выключен: нет MAX_WEBHOOK_DOMAIN и MAX_BOT_POLLING != true. " +
+      "Уведомления и внутренний API работают."
+  );
 }
 
 startInternalServer();

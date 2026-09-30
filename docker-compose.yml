@@ -54,7 +54,7 @@ services:
       - backend
     environment:
       MAX_BOT_TOKEN: ${MAX_BOT_TOKEN}
-      MAX_API_BASE: ${MAX_API_BASE}
+      MAX_BOT_POLLING: ${MAX_BOT_POLLING:-false}
       BACKEND_URL: ${BACKEND_URL}
       MINIAPP_PUBLIC_URL: ${MINIAPP_PUBLIC_URL}
     ports:
